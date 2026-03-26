@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #000000;
+  --surface: #1a1a1a;
+  --primary: #00ff00;
+  --accent: #ff00ff;
+  --text: #ffffff;
+  --muted: #999999;
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+}
+
+.container-hero {
+  background: radial-gradient(60% 60% at 50% 0%, rgba(0,255,0,0.08), rgba(0,0,0,0) 60%), #000;
+}
