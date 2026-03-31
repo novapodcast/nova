@@ -19,7 +19,7 @@ export const translations = {
     // Home Page
     home: {
       tagline: 'Hindura ibitekerezo mubice, inzozi zibe ukuri',
-      subtitle: 'Vugurura podcast zuzuye inkuru ninzobere. Shakisha igice cyawe gikurikira utangire kumva uyu munsi.',
+      subtitle: 'Umva kdi umenye podcast zuzuye inkuru zidasanzwe kdi zikoranye ubuhanga. Shakisha igice (podcast) cyawe gikurikira utangire kumva uyu munsi.',
       startListening: 'Tangira Kumva',
       browsePlans: 'Reba Gahunda',
       episodesAvailable: 'Ibice 150K+ Biraboneka',
