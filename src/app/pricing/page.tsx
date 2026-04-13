@@ -9,10 +9,12 @@ interface PricingTier {
   id: string;
   plan_name: string;
   display_name_en: string;
+  display_name_rw: string;
   duration_months: number;
   price_rwf: number;
   savings_rwf: number;
   features_en: string[];
+  features_rw: string[];
   is_highlighted: boolean;
   is_active: boolean;
   sort_order: number;
@@ -20,7 +22,7 @@ interface PricingTier {
 
 export default function PricingPage() {
   const { language } = useLanguage();
-  const [duration, setDuration] = useState<'1m' | '3m' | '6m'>('1m');
+  const [duration, setDuration] = useState<'1m' | '12m'>('1m');
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +35,8 @@ export default function PricingPage() {
         .order('sort_order', { ascending: true });
       
       if (!error && data) {
-        setTiers(data as PricingTier[]);
+        const filtered = (data as PricingTier[]).filter((t) => [0, 1, 12].includes(t.duration_months));
+        setTiers(filtered);
       }
       setLoading(false);
     };
@@ -44,7 +47,7 @@ export default function PricingPage() {
   const groupedPlans = tiers.reduce((acc, tier) => {
     const baseName = tier.display_name_en;
     if (!acc[baseName]) acc[baseName] = {};
-    const key = tier.duration_months === 1 ? '1m' : tier.duration_months === 3 ? '3m' : tier.duration_months === 6 ? '6m' : 'free';
+    const key = tier.duration_months === 1 ? '1m' : tier.duration_months === 12 ? '12m' : 'free';
     acc[baseName][key] = tier;
     return acc;
   }, {} as Record<string, Record<string, PricingTier>>);
@@ -81,9 +84,9 @@ export default function PricingPage() {
         <p className="text-muted max-w-2xl mx-auto">{t('pricing.subtitle', language)}</p>
       </div>
 
-      {/* Duration Toggle */}
-      <div className="flex justify-center gap-3 mb-12">
-        {(['1m', '3m', '6m'] as const).map((d) => (
+      {/* Billing Toggle: Monthly vs Annual (12m) */}
+      <div className="flex items-center justify-center gap-3 mb-12">
+        {(['1m', '12m'] as const).map((d) => (
           <button
             key={d}
             onClick={() => setDuration(d)}
@@ -93,9 +96,7 @@ export default function PricingPage() {
                 : 'border-white/10 text-muted hover:border-white/30 hover:text-white'
             }`}
           >
-            {d === '1m' && t('pricing.oneMonth', language)}
-            {d === '3m' && t('pricing.threeMonths', language)}
-            {d === '6m' && t('pricing.sixMonths', language)}
+            {d === '1m' ? t('pricing.billingMonthly', language) : t('pricing.billingAnnual', language)}
           </button>
         ))}
       </div>
@@ -105,12 +106,13 @@ export default function PricingPage() {
         {/* Free Plan */}
         {freePlan && (
           <div className="bg-[var(--surface)] rounded-2xl p-6 ring-1 ring-white/5 flex flex-col">
-            <h3 className="text-xl font-bold mb-2">{freePlan.display_name_en}</h3>
+            <h3 className="text-xl font-bold mb-2">{language === 'rw' ? freePlan.display_name_rw : freePlan.display_name_en}</h3>
             <div className="mb-4">
-              <p className="text-3xl font-bold">{t('pricing.free', language)}</p>
+              <p className="text-3xl font-bold">0 RWF</p>
+              <p className="text-sm text-muted mt-1">forever</p>
             </div>
             <ul className="text-sm space-y-2.5 mb-6 flex-grow">
-              {freePlan.features_en.map((feature, idx) => (
+              {(language === 'rw' ? freePlan.features_rw : freePlan.features_en).map((feature, idx) => (
                 <li key={idx} className="flex items-start gap-2">
                   <span className="text-primary mt-0.5">✓</span>
                   <span className="text-muted">{feature}</span>
@@ -131,19 +133,28 @@ export default function PricingPage() {
           const planTiers = groupedPlans[planName];
           const currentTier = planTiers[duration];
           const monthlyTier = planTiers['1m'];
-          
-          if (!currentTier) return null;
 
-          const savingsPercent = duration !== '1m' && monthlyTier
+          if (!currentTier || !monthlyTier) return null;
+
+          const isAnnual = duration === '12m';
+          const monthlyEffective = isAnnual ? Math.round(currentTier.price_rwf / 12) : monthlyTier.price_rwf;
+          const savingsPercent = isAnnual
             ? calculateSavingsPercent(monthlyTier.price_rwf, currentTier.price_rwf, currentTier.duration_months)
             : 0;
+
+          const marketingName: Record<string, string> = { Basic: 'Younger', Pro: 'Brave', Premium: 'Genius' };
+
+          // Feature list with graceful fallback: if annual tier has empty features, use monthly tier features
+          const featuresForLanguage = (tier: PricingTier) => (language === 'rw' ? tier.features_rw : tier.features_en) || [];
+          const currentFeatures = featuresForLanguage(currentTier);
+          const displayFeatures = currentFeatures.length > 0 ? currentFeatures : featuresForLanguage(monthlyTier);
 
           return (
             <div
               key={planName}
               className={`rounded-2xl p-6 flex flex-col relative ${
                 currentTier.is_highlighted
-                  ? 'bg-gradient-to-b from-primary/10 to-[var(--surface)] ring-2 ring-primary scale-105 md:scale-105'
+                  ? 'bg-gradient-to-b from-primary/10 to-[var(--surface)] ring-2 ring-primary md:scale-[1.02]'
                   : 'bg-[var(--surface)] ring-1 ring-white/5'
               }`}
             >
@@ -152,23 +163,27 @@ export default function PricingPage() {
                   ⭐ {t('admin.mostPopular', language)}
                 </div>
               )}
-              
-              <h3 className="text-xl font-bold mb-2">{currentTier.display_name_en}</h3>
-              
+
+              <h3 className="text-xl font-bold mb-1">{language === 'rw' ? currentTier.display_name_rw : currentTier.display_name_en}</h3>
+              <div className="text-xs text-muted mb-3">The {marketingName[planName] ?? ''} Choice</div>
+
               <div className="mb-4">
-                <p className="text-3xl font-bold">{formatPrice(currentTier.price_rwf)} RWF</p>
+                {isAnnual && (
+                  <div className="text-xs line-through text-white/40 mb-1">{formatPrice(monthlyTier.price_rwf)} RWF / mo</div>
+                )}
+                <p className="text-3xl font-bold">{formatPrice(monthlyEffective)} RWF</p>
                 <p className="text-sm text-muted mt-1">
-                  {duration === '1m' ? t('pricing.perMonth', language) : t('pricing.forMonths', language, { count: currentTier.duration_months })}
+                  {isAnnual ? t('pricing.billedYearly', language) : t('pricing.perMonth', language)}
                 </p>
-                {savingsPercent > 0 && (
-                  <p className="text-sm text-green-400 font-semibold mt-1">
-                    {t('pricing.save', language, { percent: savingsPercent })}
+                {isAnnual && (
+                  <p className="text-xs font-semibold mt-2 inline-block px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                    {t('pricing.annualDiscount', language)}
                   </p>
                 )}
               </div>
 
               <ul className="text-sm space-y-2.5 mb-6 flex-grow">
-                {currentTier.features_en.map((feature, idx) => (
+                {displayFeatures.map((feature, idx) => (
                   <li key={idx} className="flex items-start gap-2">
                     <span className="text-primary mt-0.5">✓</span>
                     <span className="text-muted">{feature}</span>

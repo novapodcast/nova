@@ -39,6 +39,20 @@ export default function SignupPage() {
       <h1 className="text-3xl font-bold mb-2">{t('auth.createAccount', language)}</h1>
       <p className="text-muted mb-8">{t('auth.joinNova', language)}</p>
 
+      <button
+        onClick={async () => {
+          setError(null);
+          setInfo(null);
+          setLoading(true);
+          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: typeof window !== 'undefined' ? window.location.origin + '/dashboard' : undefined } });
+          setLoading(false);
+          if (error) setError(error.message);
+        }}
+        className="w-full px-4 py-2 rounded-md border border-white/10 hover:border-white/30 mb-4"
+      >
+        {t('auth.continueWithGoogle', language)}
+      </button>
+
       <form className="space-y-4" onSubmit={onSubmit}>
         <div>
           <label className="block text-sm mb-1">{t('auth.email', language)}</label>

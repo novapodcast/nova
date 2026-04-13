@@ -13,7 +13,10 @@ function Header() {
   return (
     <header className="w-full bg-black/60 backdrop-blur sticky top-0 z-50 border-b border-white/5">
       <div className="container flex items-center justify-between py-4">
-        <Link href="/" className="text-xl font-bold text-white">Nova</Link>
+        <Link href="/" className="flex items-center gap-2">
+          <img src="/favicon.svg" alt="Nova" className="h-7 w-7" />
+          <span className="text-xl font-bold text-white">Nova</span>
+        </Link>
         <button
           onClick={() => setMobileOpen(true)}
           className="md:hidden inline-flex items-center justify-center rounded-md p-2 text-white hover:bg-white/10"
