@@ -42,7 +42,7 @@ export const translations = {
       chooseDuration: 'Hitamo uburyo bwo kwishyura',
       billingMonthly: 'Ukwezi',
       billingAnnual: 'Umwaka (−25%)',
-      billedYearly: '/ kwezi, wishyurwa rimwe mu mwaka',
+      billedYearly: '/ kwezi, wishyura rimwe mu mwaka',
       annualDiscount: '−25% igabanywa k\'umwaka',
       free: 'Ubuntu',
       perMonth: 'ku kwezi',
