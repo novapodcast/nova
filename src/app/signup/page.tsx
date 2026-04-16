@@ -44,7 +44,7 @@ export default function SignupPage() {
           setError(null);
           setInfo(null);
           setLoading(true);
-          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: typeof window !== 'undefined' ? window.location.origin + '/dashboard' : undefined } });
+          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
           setLoading(false);
           if (error) setError(error.message);
         }}
