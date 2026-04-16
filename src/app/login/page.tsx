@@ -36,7 +36,14 @@ export default function LoginPage() {
         onClick={async () => {
           setError(null);
           setLoading(true);
-          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+          const redirectUrl = `${window.location.origin}/dashboard`;
+          console.log('Redirect URL:', redirectUrl);
+          const { error } = await supabase.auth.signInWithOAuth({ 
+          provider: 'google',
+          options: { 
+            redirectTo: redirectUrl
+          }
+        });
           setLoading(false);
           if (error) setError(error.message);
         }}
