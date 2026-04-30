@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
@@ -52,6 +53,8 @@ export default function DashboardPage() {
       setUserEmail(email);
 
       // Load profile
+      const cachedProfile = getCache<UserProfile>('dash_profile_v1');
+      if (cachedProfile) setProfile(cachedProfile);
       const { data: profileData } = await supabase
         .from('profiles')
         .select('email, full_name, avatar_url')
@@ -73,11 +76,17 @@ export default function DashboardPage() {
         let planName = 'Unknown';
         // Look up plan name from pricing_tiers using plan_id
         if (subData.plan_id) {
-          const { data: tierData } = await supabase
-            .from('pricing_tiers')
-            .select('display_name_en, plan_name')
-            .eq('id', subData.plan_id)
-            .single();
+          const cacheKey = `dash_tier_${subData.plan_id}`;
+          let tierData = getCache<{ display_name_en?: string; plan_name?: string }>(cacheKey) as any;
+          if (!tierData) {
+            const { data } = await supabase
+              .from('pricing_tiers')
+              .select('display_name_en, plan_name')
+              .eq('id', subData.plan_id)
+              .single();
+            tierData = data;
+            if (tierData) setCache(cacheKey, tierData, 5 * 60 * 1000);
+          }
           if (tierData) {
             planName = tierData.display_name_en || tierData.plan_name || 'Unknown';
           }
@@ -90,6 +99,9 @@ export default function DashboardPage() {
       }
 
       // Load favorites
+      const cacheKeyFavs = `dash_favs_${sessionData.session.user.id}_v1`;
+      const cachedFavs = getCache<Favorite[]>(cacheKeyFavs);
+      if (cachedFavs) setFavorites(cachedFavs);
       const { data: favData } = await supabase
         .from('favorites')
         .select(`
@@ -104,11 +116,13 @@ export default function DashboardPage() {
         .limit(5);
       
       if (favData) {
-        setFavorites(favData.map((f: any) => ({
+        const items = favData.map((f: any) => ({
           id: f.id,
           episode_id: f.episode_id,
           episodes: f.episodes
-        })) as Favorite[]);
+        })) as Favorite[];
+        setFavorites(items);
+        setCache(cacheKeyFavs, items, 60 * 1000);
       }
 
       setLoading(false);

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
@@ -20,6 +21,11 @@ export default function EpisodesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = getCache<Episode[]>('episodes_recent_v1');
+    if (cached && cached.length) {
+      setEpisodes(cached);
+      setLoading(false);
+    }
     const load = async () => {
       const { data, error } = await supabase
         .from('episodes')
@@ -27,7 +33,11 @@ export default function EpisodesPage() {
         .eq('is_active', true)
         .order('published_at', { ascending: false })
         .limit(24);
-      if (!error && data) setEpisodes(data as Episode[]);
+      if (!error && data) {
+        const rows = data as Episode[];
+        setEpisodes(rows);
+        setCache('episodes_recent_v1', rows, 60 * 1000);
+      }
       setLoading(false);
     };
     load();
@@ -36,7 +46,17 @@ export default function EpisodesPage() {
   return (
     <div className="container py-12 md:py-16">
       <h1 className="text-3xl font-bold mb-6">{t('episodes.title', language)}</h1>
-      {loading && <div className="text-muted">{t('common.loading', language)}</div>}
+      {loading && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5">
+              <div className="aspect-[4/3] rounded-lg bg-white/5 mb-3 animate-pulse" />
+              <div className="h-3 w-24 bg-white/5 rounded mb-2 animate-pulse" />
+              <div className="h-4 w-full bg-white/5 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
       {!loading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           {episodes.map((ep) => (

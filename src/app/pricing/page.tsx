@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
@@ -27,16 +28,21 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = getCache<PricingTier[]>('pricing_tiers_v1');
+    if (cached && cached.length) {
+      setTiers(cached);
+      setLoading(false);
+    }
     const loadTiers = async () => {
       const { data, error } = await supabase
         .from('pricing_tiers')
         .select('*')
         .eq('is_active', true)
         .order('sort_order', { ascending: true });
-      
       if (!error && data) {
         const filtered = (data as PricingTier[]).filter((t) => [0, 1, 12].includes(t.duration_months));
         setTiers(filtered);
+        setCache('pricing_tiers_v1', filtered, 5 * 60 * 1000);
       }
       setLoading(false);
     };
@@ -72,7 +78,25 @@ export default function PricingPage() {
   if (loading) {
     return (
       <div className="container py-12 md:py-16">
-        <div className="text-center text-muted">{t('common.loading', language)}</div>
+        <div className="text-center mb-8">
+          <div className="h-7 w-64 bg-white/5 rounded mx-auto mb-3 animate-pulse" />
+          <div className="h-4 w-[42rem] max-w-full bg-white/5 rounded mx-auto animate-pulse" />
+        </div>
+        <div className="grid md:grid-cols-4 gap-6 max-w-7xl mx-auto">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-2xl p-6 bg-[var(--surface)] ring-1 ring-white/5">
+              <div className="h-6 w-24 bg-white/5 rounded mb-3 animate-pulse" />
+              <div className="h-8 w-32 bg-white/5 rounded mb-2 animate-pulse" />
+              <div className="h-3 w-24 bg-white/5 rounded mb-4 animate-pulse" />
+              <div className="space-y-2 mb-6">
+                {Array.from({ length: 5 }).map((_, j) => (
+                  <div key={j} className="h-3 w-full bg-white/5 rounded animate-pulse" />
+                ))}
+              </div>
+              <div className="h-9 w-full bg-white/5 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
