@@ -36,7 +36,12 @@ export default function LoginPage() {
         onClick={async () => {
           setError(null);
           setLoading(true);
-          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined,
+            },
+          });
           setLoading(false);
           if (error) setError(error.message);
         }}
