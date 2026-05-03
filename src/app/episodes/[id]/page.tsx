@@ -18,6 +18,7 @@ interface Episode {
   duration_seconds: number | null;
   published_at: string | null;
   podcast_id: string | null;
+  categories?: string[] | null;
   podcasts?: {
     title_en: string | null;
     title_rw: string | null;
@@ -51,6 +52,7 @@ export default function EpisodeDetailPage({ params }: Props) {
           duration_seconds,
           published_at,
           podcast_id,
+          categories,
           podcasts!inner(title_en, title_rw)
         `)
         .eq('id', params.id)
@@ -118,6 +120,25 @@ export default function EpisodeDetailPage({ params }: Props) {
   const title = (language === 'rw' ? episode.title_rw : episode.title_en) || episode.title_en || episode.title_rw || t('episodes.untitled', language);
   const description = (language === 'rw' ? episode.description_rw : episode.description_en) || episode.description_en || episode.description_rw || '';
   const podcastTitle = episode.podcasts ? ((language === 'rw' ? episode.podcasts.title_rw : episode.podcasts.title_en) || episode.podcasts.title_en || episode.podcasts.title_rw) : null;
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  const handleShare = async () => {
+    const text = `${title}`;
+    try {
+      // Web Share API (mobile-friendly)
+      if (navigator.share) {
+        await navigator.share({ title, text, url: shareUrl });
+        return;
+      }
+    } catch {}
+    // Fallback: copy link
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert('Link copied!');
+    } catch {
+      window.open(shareUrl, '_blank');
+    }
+  };
 
   return (
     <div className="container py-12 md:py-16">
@@ -155,7 +176,18 @@ export default function EpisodeDetailPage({ params }: Props) {
               <button className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
                 + Add to Favorites
               </button>
+              <button onClick={handleShare} className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
+                Share
+              </button>
             </div>
+
+            {(episode.categories && episode.categories.length > 0) && (
+              <div className="mt-4 flex gap-2 flex-wrap">
+                {episode.categories.map((cat) => (
+                  <span key={cat} className="px-2 py-0.5 rounded-full bg-white/5 text-xs text-muted">{cat}</span>
+                ))}
+              </div>
+            )}
 
             <div className="mt-8 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <p className="text-sm text-blue-400">
@@ -163,6 +195,11 @@ export default function EpisodeDetailPage({ params }: Props) {
               </p>
             </div>
           </div>
+        </div>
+        <div className="mt-6 flex items-center gap-3 text-sm">
+          <a href={`https://x.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">Share on X</a>
+          <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">Facebook</a>
+          <a href={`https://wa.me/?text=${encodeURIComponent(title + ' ' + shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">WhatsApp</a>
         </div>
       </div>
     </div>
