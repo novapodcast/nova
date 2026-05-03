@@ -46,10 +46,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  // Upsert to ensure a profile row exists for this user
   const { error: upErr } = await supabase
     .from('profiles')
-    .update({ is_admin: true })
-    .eq('id', userRes.user.id);
+    .upsert({ id: userRes.user.id, is_admin: true }, { onConflict: 'id' });
 
   if (upErr) {
     return NextResponse.json({ error: upErr.message }, { status: 400 });
