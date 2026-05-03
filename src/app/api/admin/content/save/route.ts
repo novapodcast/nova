@@ -20,6 +20,7 @@ type SaveBody = {
   cover_image_url?: string;
   duration_seconds?: number;
   is_premium?: boolean;
+  categories?: string[];
 };
 
 export async function POST(request: NextRequest) {
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
           cover_image_url: body.cover_image_url,
           duration_seconds: body.duration_seconds,
           is_premium: body.is_premium,
+          categories: body.categories,
         })
         .eq('id', body.id);
 
@@ -109,6 +111,7 @@ export async function POST(request: NextRequest) {
           cover_image_url: body.cover_image_url,
           duration_seconds: body.duration_seconds,
           is_premium: body.is_premium || false,
+          categories: body.categories || [],
         });
 
       if (insertErr) {

@@ -32,6 +32,7 @@ export default function AdminContentPage() {
     cover_image_url: '',
     duration_seconds: 0,
     is_premium: false,
+    categories: [] as string[],
   });
   const [saving, setSaving] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -89,6 +90,7 @@ export default function AdminContentPage() {
       cover_image_url: ep.cover_image_url || '',
       duration_seconds: ep.duration_seconds || 0,
       is_premium: ep.is_premium,
+      categories: (ep as any).categories || [],
     });
     setShowNewForm(false);
   }
@@ -102,6 +104,7 @@ export default function AdminContentPage() {
       cover_image_url: '',
       duration_seconds: 0,
       is_premium: false,
+      categories: [],
     });
     setShowNewForm(true);
   }
@@ -307,6 +310,36 @@ export default function AdminContentPage() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
+                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Categories</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {formData.categories.map((cat, idx) => (
+                  <span key={idx} className="px-2 py-1 text-xs rounded-full bg-white/10">{cat}
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, categories: formData.categories.filter((c) => c !== cat) })}
+                      className="ml-1 text-muted hover:text-white"
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+              <input
+                type="text"
+                placeholder="Add category and press Enter (e.g., Business)"
+                onKeyDown={(e) => {
+                  const input = e.currentTarget as HTMLInputElement;
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const v = input.value.trim();
+                    if (v && !formData.categories.includes(v)) {
+                      setFormData({ ...formData, categories: [...formData.categories, v] });
+                      input.value = '';
+                    }
+                  }
+                }}
                 className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
