@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { isAdminEmail } from '@/lib/admin';
+import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration, formatFileSize } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/i18n';
 
@@ -34,6 +35,11 @@ export default function AdminContentPage() {
   });
   const [saving, setSaving] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [useAudioUrl, setUseAudioUrl] = useState(false);
+  const [useCoverUrl, setUseCoverUrl] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -98,6 +104,47 @@ export default function AdminContentPage() {
       is_premium: false,
     });
     setShowNewForm(true);
+  }
+
+  async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Cover image too large. Max 10MB.');
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const { url } = await uploadEpisodeCover(file);
+      setFormData({ ...formData, cover_image_url: url });
+    } catch (error: any) {
+      alert(error.message || 'Upload failed');
+    } finally {
+      setUploadingCover(false);
+    }
+  }
+
+  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024 * 1024) {
+      alert('Audio file too large. Max 500MB.');
+      return;
+    }
+
+    setUploadingAudio(true);
+    try {
+      const duration = await getAudioDuration(file);
+      const { url } = await uploadEpisodeAudio(file);
+      setFormData({ ...formData, audio_url: url, duration_seconds: duration });
+    } catch (error: any) {
+      alert(error.message || 'Upload failed');
+    } finally {
+      setUploadingAudio(false);
+    }
   }
 
   async function handleSave() {
@@ -209,6 +256,11 @@ export default function AdminContentPage() {
     );
   }
 
+  const filteredEpisodes = episodes.filter((ep) =>
+    ep.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    ep.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="container py-12 md:py-16">
       <div className="flex items-center justify-between mb-8">
@@ -222,6 +274,16 @@ export default function AdminContentPage() {
         >
           + New Episode
         </button>
+      </div>
+
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="🔍 Search episodes..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+        />
       </div>
 
       {(editingId || showNewForm) && (
@@ -249,22 +311,73 @@ export default function AdminContentPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Audio URL</label>
-              <input
-                type="text"
-                value={formData.audio_url}
-                onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium">Audio File</label>
+                <button
+                  type="button"
+                  onClick={() => setUseAudioUrl(!useAudioUrl)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {useAudioUrl ? '📁 Upload File' : '🔗 Use URL'}
+                </button>
+              </div>
+              {useAudioUrl ? (
+                <input
+                  type="text"
+                  value={formData.audio_url}
+                  onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
+                  placeholder="https://example.com/audio.mp3"
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
+                    onChange={handleAudioUpload}
+                    disabled={uploadingAudio}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
+                  />
+                  {uploadingAudio && <p className="text-xs text-primary mt-1">Uploading audio...</p>}
+                  <p className="text-xs text-muted mt-1">Max 500MB. MP3, WAV, OGG, AAC, M4A. Duration auto-detected.</p>
+                </div>
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cover Image URL</label>
-              <input
-                type="text"
-                value={formData.cover_image_url}
-                onChange={(e) => setFormData({ ...formData, cover_image_url: e.target.value })}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium">Cover Image</label>
+                <button
+                  type="button"
+                  onClick={() => setUseCoverUrl(!useCoverUrl)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {useCoverUrl ? '📁 Upload File' : '🔗 Use URL'}
+                </button>
+              </div>
+              {useCoverUrl ? (
+                <input
+                  type="text"
+                  value={formData.cover_image_url}
+                  onChange={(e) => setFormData({ ...formData, cover_image_url: e.target.value })}
+                  placeholder="https://example.com/cover.jpg"
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleCoverUpload}
+                    disabled={uploadingCover}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
+                  />
+                  {uploadingCover && <p className="text-xs text-primary mt-1">Uploading cover...</p>}
+                  {formData.cover_image_url && (
+                    <img src={formData.cover_image_url} alt="Cover preview" className="mt-2 w-32 h-32 object-cover rounded-lg border border-white/10" />
+                  )}
+                  <p className="text-xs text-muted mt-1">Max 10MB. JPG, PNG, WebP.</p>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Duration (seconds)</label>
@@ -305,7 +418,7 @@ export default function AdminContentPage() {
       )}
 
       <div className="space-y-4">
-        {episodes.map((ep) => (
+        {filteredEpisodes.map((ep) => (
           <div key={ep.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -345,6 +458,12 @@ export default function AdminContentPage() {
           </div>
         ))}
       </div>
+
+      {filteredEpisodes.length === 0 && episodes.length > 0 && (
+        <div className="text-center py-12 text-muted">
+          No episodes match your search.
+        </div>
+      )}
 
       {episodes.length === 0 && (
         <div className="text-center py-12 text-muted">

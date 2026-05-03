@@ -43,7 +43,7 @@ export default function AdminPage() {
       <h1 className="text-3xl font-bold mb-2">{t('admin.title', language)}</h1>
       <p className="text-muted mb-8">{t('admin.subtitle', language)}</p>
 
-      <div className="grid md:grid-cols-3 gap-5">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
         <Link href="/admin/pricing" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
           <div className="text-sm text-muted mb-2">{t('admin.pricing', language)}</div>
           <div className="text-xl font-semibold mb-2">{t('admin.managePlans', language)}</div>
@@ -60,6 +60,12 @@ export default function AdminPage() {
           <div className="text-sm text-muted mb-2">{t('admin.content', language)}</div>
           <div className="text-xl font-semibold mb-2">Content Management</div>
           <p className="text-sm text-muted">{t('admin.manageEpisodes', language)}</p>
+        </Link>
+
+        <Link href="/admin/users" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
+          <div className="text-sm text-muted mb-2">Users</div>
+          <div className="text-xl font-semibold mb-2">User Management</div>
+          <p className="text-sm text-muted">Manage users and permissions</p>
         </Link>
       </div>
     </div>

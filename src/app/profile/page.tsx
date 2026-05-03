@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { uploadAvatar } from '@/lib/upload';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
@@ -16,9 +17,12 @@ export default function ProfilePage() {
   const { language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [userId, setUserId] = useState<string>('');
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [useUrlInput, setUseUrlInput] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -33,6 +37,9 @@ export default function ProfilePage() {
       }
 
       const email = sessionData.session.user.email || '';
+      const uid = sessionData.session.user.id;
+      setUserId(uid);
+      
       const { data: profileData } = await supabase
         .from('profiles')
         .select('email, full_name, avatar_url')
@@ -49,6 +56,29 @@ export default function ProfilePage() {
     loadProfile();
     return () => { active = false; };
   }, [router]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !userId) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File too large. Max 5MB.' });
+      return;
+    }
+
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      const { url } = await uploadAvatar(file, userId);
+      setAvatarUrl(url);
+      setMessage({ type: 'success', text: 'Avatar uploaded! Click Save to apply.' });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Upload failed' });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!profile) return;
@@ -117,15 +147,44 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">{t('profile.avatarUrl', language)}</label>
-              <input
-                type="url"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://example.com/avatar.jpg"
-                className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
-              />
-              <p className="text-xs text-muted mt-1">{t('profile.avatarHint', language)}</p>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">{t('profile.avatarUrl', language)}</label>
+                <button
+                  type="button"
+                  onClick={() => setUseUrlInput(!useUrlInput)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {useUrlInput ? '📁 Upload File' : '🔗 Use URL'}
+                </button>
+              </div>
+              
+              {useUrlInput ? (
+                <input
+                  type="url"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  placeholder="https://example.com/avatar.jpg"
+                  className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+                />
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
+                  />
+                  {uploading && <p className="text-xs text-primary">Uploading...</p>}
+                </div>
+              )}
+              
+              {avatarUrl && (
+                <div className="mt-3">
+                  <img src={avatarUrl} alt="Avatar preview" className="w-20 h-20 rounded-full object-cover border-2 border-white/10" />
+                </div>
+              )}
+              <p className="text-xs text-muted mt-1">Max 5MB. JPG, PNG, WebP, or GIF.</p>
             </div>
 
             {message && (
