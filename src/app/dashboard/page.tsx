@@ -186,7 +186,7 @@ export default function DashboardPage() {
           <div className="text-sm text-muted mb-2">{t('dashboard.profile', language)}</div>
           <div className="text-xl font-semibold mb-1">{profile?.full_name || t('dashboard.notSet', language)}</div>
           <div className="text-sm text-muted mb-3">{userEmail}</div>
-          <Link href="#" className="text-sm text-primary hover:underline">{t('dashboard.editProfile', language)}</Link>
+          <Link href="/profile" className="text-sm text-primary hover:underline">{t('dashboard.editProfile', language)}</Link>
         </div>
 
         <div className="bg-[var(--surface)] rounded-xl p-5 ring-1 ring-white/5">
@@ -196,9 +196,18 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {favorites.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4">{t('dashboard.yourFavorites', language)}</h2>
+      <div className="mb-8">
+        <h2 className="text-xl font-bold mb-4">{t('dashboard.yourFavorites', language)}</h2>
+        {favorites.length === 0 && (
+          <div className="bg-[var(--surface)] rounded-xl p-8 ring-1 ring-white/5 text-center">
+            <div className="text-4xl mb-3">❤️</div>
+            <p className="text-muted mb-4">You haven't added any favorites yet</p>
+            <Link href="/episodes" className="inline-block px-4 py-2 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition text-sm">
+              Browse Episodes
+            </Link>
+          </div>
+        )}
+        {favorites.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {favorites.map((fav) => (
               <Link
@@ -213,8 +222,8 @@ export default function DashboardPage() {
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
         <p className="text-sm text-blue-400">

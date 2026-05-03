@@ -30,6 +30,7 @@ export default function AdminPricingPage() {
   const [editForm, setEditForm] = useState<Partial<PricingTier>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -61,18 +62,21 @@ export default function AdminPricingPage() {
     setEditingId(tier.id);
     setEditForm(tier);
     setMessage(null);
+    setSaveError(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
     setMessage(null);
+    setSaveError(null);
   };
 
   const saveEdit = async () => {
     if (!editingId || !editForm) return;
     setSaving(true);
     setMessage(null);
+    setSaveError(null);
 
     const { error } = await supabase
       .from('pricing_tiers')
@@ -91,7 +95,8 @@ export default function AdminPricingPage() {
     setSaving(false);
 
     if (error) {
-      setMessage({ type: 'error', text: `Error: ${error.message}` });
+      setSaveError(error.message);
+      setMessage({ type: 'error', text: `Failed to save: ${error.message}` });
     } else {
       setMessage({ type: 'success', text: 'Pricing tier updated successfully!' });
       setEditingId(null);

@@ -161,6 +161,19 @@ export const translations = {
       copyright: '© {{year}} Nova',
     },
     
+    // Profile
+    profile: {
+      editProfile: 'Hindura umwirondoro',
+      email: 'Imeyili',
+      emailReadonly: 'Imeyili ntishobora guhindurwa',
+      fullName: 'Amazina yuzuye',
+      fullNamePlaceholder: 'Andika amazina yawe',
+      avatarUrl: 'Ifoto yawe (URL)',
+      avatarHint: 'Shyiramo URL y\'ifoto yawe',
+      updateSuccess: 'Umwirondoro wahinduwe neza',
+      updateError: 'Habayeho ikosa mu guhindura umwirondoro',
+    },
+    
     // Common
     common: {
       loading: 'Birimo gutegurwa...',
@@ -169,6 +182,9 @@ export const translations = {
       comingSoon: 'Biza vuba',
       episodes: 'ibice (Podcasts)',
       signOut: 'Sohoka',
+      save: 'Bika',
+      saving: 'Birimo kubikwa...',
+      cancel: 'Hagarika',
     },
   },
   
@@ -330,6 +346,19 @@ export const translations = {
       copyright: '© {{year}} Nova',
     },
     
+    // Profile
+    profile: {
+      editProfile: 'Edit Profile',
+      email: 'Email',
+      emailReadonly: 'Email cannot be changed',
+      fullName: 'Full Name',
+      fullNamePlaceholder: 'Enter your full name',
+      avatarUrl: 'Avatar URL',
+      avatarHint: 'Enter a URL for your profile picture',
+      updateSuccess: 'Profile updated successfully',
+      updateError: 'Failed to update profile',
+    },
+    
     // Common
     common: {
       loading: 'Loading...',
@@ -338,6 +367,9 @@ export const translations = {
       comingSoon: 'Coming Soon',
       episodes: 'episodes',
       signOut: 'Sign out',
+      save: 'Save Changes',
+      saving: 'Saving...',
+      cancel: 'Cancel',
     },
   },
 };

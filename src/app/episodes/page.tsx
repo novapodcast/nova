@@ -57,7 +57,14 @@ export default function EpisodesPage() {
           ))}
         </div>
       )}
-      {!loading && (
+      {!loading && episodes.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">🎙️</div>
+          <h2 className="text-xl font-semibold mb-2">No episodes yet</h2>
+          <p className="text-muted">Check back soon for new content!</p>
+        </div>
+      )}
+      {!loading && episodes.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           {episodes.map((ep) => (
             <Link key={ep.id} href={`/episodes/${ep.id}`} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition">
