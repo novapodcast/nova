@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
+import NewsletterSignup from '../components/NewsletterSignup';
 
 export default function HomePage() {
   const { language } = useLanguage();
@@ -52,16 +53,20 @@ export default function HomePage() {
       </section>
 
       <section className="container pb-12 md:pb-16">
+        <NewsletterSignup />
+      </section>
+
+      <section className="container pb-12 md:pb-16">
         <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 flex items-center justify-between flex-wrap gap-4">
           <div>
             <div className="text-sm text-muted">Follow Nova</div>
             <div className="text-white font-semibold">Join our community</div>
           </div>
           <div className="flex items-center gap-3">
-            <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10">X</a>
-            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10">IG</a>
-            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10">FB</a>
-            <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10">YT</a>
+            <a href="https://twitter.com/novapodcast" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition">X</a>
+            <a href="https://instagram.com/novapodcast" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition">IG</a>
+            <a href="https://facebook.com/novapodcast" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition">FB</a>
+            <a href="https://youtube.com/@novapodcast" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition">YT</a>
           </div>
         </div>
       </section>

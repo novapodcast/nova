@@ -21,6 +21,7 @@ export default function EpisodesPage() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const cached = getCache<Episode[]>('episodes_recent_v1');
@@ -54,13 +55,37 @@ export default function EpisodesPage() {
   }, [episodes]);
 
   const visibleEpisodes = useMemo(() => {
-    if (!selectedCategory) return episodes;
-    return episodes.filter((ep) => (ep.categories || []).includes(selectedCategory));
-  }, [episodes, selectedCategory]);
+    let filtered = episodes;
+    
+    if (selectedCategory) {
+      filtered = filtered.filter((ep) => (ep.categories || []).includes(selectedCategory));
+    }
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((ep) => 
+        ep.title_en?.toLowerCase().includes(query) ||
+        ep.title_rw?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [episodes, selectedCategory, searchQuery]);
 
   return (
     <div className="container py-12 md:py-16">
       <h1 className="text-3xl font-bold mb-6">{t('episodes.title', language)}</h1>
+      
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="🔍 Search episodes..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+        />
+      </div>
+
       {!loading && allCategories.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap mb-6">
           <button

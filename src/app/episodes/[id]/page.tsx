@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Head from 'next/head';
 import { supabase } from '@/lib/supabaseClient';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../../contexts/LanguageContext';
@@ -12,12 +13,12 @@ interface Episode {
   id: string;
   title_en: string | null;
   title_rw: string | null;
-  description_en: string | null;
-  description_rw: string | null;
+  description_en?: string | null;
+  description_rw?: string | null;
   cover_image_url: string | null;
   duration_seconds: number | null;
   published_at: string | null;
-  podcast_id: string | null;
+  podcast_id?: string | null;
   categories?: string[] | null;
   podcasts?: {
     title_en: string | null;
@@ -30,6 +31,7 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
 
   useEffect(() => {
     const cacheKey = `episode_${params.id}_v1`;
@@ -73,6 +75,23 @@ export default function EpisodeDetailPage({ params }: Props) {
       setEpisode(ep);
       setCache(cacheKey, ep, 5 * 60 * 1000);
       setLoading(false);
+
+      // Fetch related episodes by categories
+      if (ep.categories && ep.categories.length > 0) {
+        const { data: related } = await supabase
+          .from('episodes')
+          .select('id, title_en, title_rw, cover_image_url, duration_seconds, published_at, categories')
+          .eq('is_active', true)
+          .neq('id', params.id)
+          .limit(4);
+        
+        if (related) {
+          const filtered = related.filter((r: any) => 
+            r.categories?.some((c: string) => ep.categories?.includes(c))
+          );
+          setRelatedEpisodes(filtered.slice(0, 4));
+        }
+      }
     };
 
     load();
@@ -141,11 +160,26 @@ export default function EpisodeDetailPage({ params }: Props) {
   };
 
   return (
-    <div className="container py-12 md:py-16">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/episodes" className="inline-flex items-center text-sm text-muted hover:text-white mb-6 transition">
-          ← Back to Episodes
-        </Link>
+    <>
+      <Head>
+        <title>{title} | Nova Podcast</title>
+        <meta name="description" content={description || `Listen to ${title} on Nova Podcast`} />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={description || `Listen to ${title} on Nova Podcast`} />
+        <meta property="og:image" content={episode.cover_image_url || 'https://nova.co.rw/hero-placeholder.png'} />
+        <meta property="og:url" content={shareUrl} />
+        <meta property="og:type" content="music.song" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title} />
+        <meta name="twitter:description" content={description || `Listen to ${title} on Nova Podcast`} />
+        <meta name="twitter:image" content={episode.cover_image_url || 'https://nova.co.rw/hero-placeholder.png'} />
+        <link rel="canonical" href={shareUrl} />
+      </Head>
+      <div className="container py-12 md:py-16">
+        <div className="max-w-4xl mx-auto">
+          <Link href="/episodes" className="inline-flex items-center text-sm text-muted hover:text-white mb-6 transition">
+            ← Back to Episodes
+          </Link>
 
         <div className="grid md:grid-cols-[300px_1fr] gap-8">
           <div className="aspect-square rounded-xl bg-black/40 overflow-hidden ring-1 ring-white/5">
@@ -201,7 +235,26 @@ export default function EpisodeDetailPage({ params }: Props) {
           <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">Facebook</a>
           <a href={`https://wa.me/?text=${encodeURIComponent(title + ' ' + shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">WhatsApp</a>
         </div>
+
+        {relatedEpisodes.length > 0 && (
+          <div className="mt-12">
+            <h2 className="text-2xl font-bold mb-6">Related Episodes</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+              {relatedEpisodes.map((ep) => (
+                <Link key={ep.id} href={`/episodes/${ep.id}`} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition">
+                  <div className="aspect-[4/3] rounded-lg bg-black/40 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={ep.cover_image_url ?? '/hero-placeholder.png'} alt={ep.title_en ?? ep.title_rw ?? 'Episode'} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="mt-3 text-xs text-muted">{t('episodes.episode', language)}</div>
+                  <div className="text-white font-semibold line-clamp-2">{(language === 'rw' ? ep.title_rw : ep.title_en) ?? ep.title_en ?? ep.title_rw ?? t('episodes.untitled', language)}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
+    </>
   );
 }
