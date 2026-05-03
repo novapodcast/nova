@@ -34,13 +34,29 @@ export default function AdminPricingPage() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       if (!active) return;
-      const email = data.user?.email ?? null;
-      if (!email || !isAdminEmail(email)) {
+      const user = data.user;
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      // Primary: check server role flag from profiles
+      let isAdmin = false;
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      if (prof?.is_admin) isAdmin = true;
+
+      // Fallback: email allowlist to avoid lockout until flag set
+      if (!isAdmin && !isAdminEmail(user.email)) {
         router.replace('/dashboard');
         return;
       }
+
       setLoading(false);
       loadTiers();
     });
