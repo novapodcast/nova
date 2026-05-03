@@ -68,6 +68,61 @@ export default function AdminAnalyticsPage() {
     }
   }
 
+  async function exportData(format: 'csv' | 'json') {
+    if (!analytics) return;
+
+    const data = {
+      summary: {
+        totalUsers: analytics.totalUsers,
+        activeSubscriptions: analytics.activeSubscriptions,
+        totalRevenue: analytics.totalRevenue,
+        totalEpisodes: analytics.totalEpisodes,
+        premiumEpisodes: analytics.premiumEpisodes,
+        recentSignups: analytics.recentSignups,
+      },
+      topEpisodes: analytics.topEpisodes,
+      revenueByPlan: analytics.revenueByPlan,
+      exportedAt: new Date().toISOString(),
+    };
+
+    if (format === 'json') {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nova-analytics-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const csvRows = [
+        ['Metric', 'Value'],
+        ['Total Users', analytics.totalUsers],
+        ['Active Subscriptions', analytics.activeSubscriptions],
+        ['Total Revenue (RWF)', analytics.totalRevenue],
+        ['Total Episodes', analytics.totalEpisodes],
+        ['Premium Episodes', analytics.premiumEpisodes],
+        ['Recent Signups (7 days)', analytics.recentSignups],
+        [''],
+        ['Top Episodes'],
+        ['Title', 'Favorites'],
+        ...analytics.topEpisodes.map((ep) => [ep.title, ep.favorites]),
+        [''],
+        ['Revenue by Plan'],
+        ['Plan', 'Revenue (RWF)', 'Subscribers'],
+        ...analytics.revenueByPlan.map((p) => [p.plan, p.revenue, p.count]),
+      ];
+
+      const csv = csvRows.map((row) => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nova-analytics-${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
+
   if (loading) {
     return (
       <div className="container py-12 md:py-16">
@@ -86,8 +141,26 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="container py-12 md:py-16">
-      <h1 className="text-3xl font-bold mb-2">Analytics Dashboard</h1>
-      <p className="text-muted mb-8">Track user engagement, revenue, and content performance</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Analytics Dashboard</h1>
+          <p className="text-muted">Track user engagement, revenue, and content performance</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => exportData('csv')}
+            className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition text-sm"
+          >
+            📊 Export CSV
+          </button>
+          <button
+            onClick={() => exportData('json')}
+            className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition text-sm"
+          >
+            📄 Export JSON
+          </button>
+        </div>
+      </div>
 
       <div className="grid md:grid-cols-3 gap-5 mb-8">
         <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
