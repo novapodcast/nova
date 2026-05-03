@@ -31,6 +31,7 @@ export default function AdminPricingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [allowlistOnly, setAllowlistOnly] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -52,10 +53,12 @@ export default function AdminPricingPage() {
       if (prof?.is_admin) isAdmin = true;
 
       // Fallback: email allowlist to avoid lockout until flag set
-      if (!isAdmin && !isAdminEmail(user.email)) {
+      const isAllowed = isAdminEmail(user.email);
+      if (!isAdmin && !isAllowed) {
         router.replace('/dashboard');
         return;
       }
+      if (!isAdmin && isAllowed) setAllowlistOnly(true);
 
       setLoading(false);
       loadTiers();
@@ -149,6 +152,31 @@ export default function AdminPricingPage() {
 
   return (
     <div className="container py-12 md:py-16">
+      {allowlistOnly && (
+        <div className="mb-6 p-4 rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+          <div className="flex items-center justify-between gap-3">
+            <div>Complete admin setup for your account.</div>
+            <button
+              onClick={async () => {
+                try {
+                  const { data: s } = await supabase.auth.getSession();
+                  const tok = s.session?.access_token;
+                  if (!tok) throw new Error('Not authenticated');
+                  const r = await fetch('/api/admin/users/promote-self', { method: 'POST', headers: { Authorization: `Bearer ${tok}` } });
+                  if (!r.ok) throw new Error('Request failed');
+                  setAllowlistOnly(false);
+                  setMessage({ type: 'success', text: 'Admin role enabled.' });
+                } catch (e: any) {
+                  setMessage({ type: 'error', text: e?.message || 'Failed to enable admin' });
+                }
+              }}
+              className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20"
+            >
+              Finalize admin role
+            </button>
+          </div>
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">{t('admin.pricingManagement', language)}</h1>
         <p className="text-muted">{t('admin.pricingSubtitle', language)}</p>
