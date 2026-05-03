@@ -50,17 +50,17 @@ export default function AdminPage() {
           <p className="text-sm text-muted">{t('admin.updatePricing', language)}</p>
         </Link>
         
-        <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 opacity-50">
+        <Link href="/admin/analytics" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
           <div className="text-sm text-muted mb-2">{t('admin.analytics', language)}</div>
-          <div className="text-xl font-semibold mb-2">{t('admin.comingSoon', language)}</div>
+          <div className="text-xl font-semibold mb-2">Analytics Dashboard</div>
           <p className="text-sm text-muted">{t('admin.viewMetrics', language)}</p>
-        </div>
+        </Link>
         
-        <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 opacity-50">
+        <Link href="/admin/content" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
           <div className="text-sm text-muted mb-2">{t('admin.content', language)}</div>
-          <div className="text-xl font-semibold mb-2">{t('admin.comingSoon', language)}</div>
+          <div className="text-xl font-semibold mb-2">Content Management</div>
           <p className="text-sm text-muted">{t('admin.manageEpisodes', language)}</p>
-        </div>
+        </Link>
       </div>
     </div>
   );
