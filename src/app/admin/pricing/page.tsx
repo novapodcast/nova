@@ -78,30 +78,34 @@ export default function AdminPricingPage() {
     setMessage(null);
     setSaveError(null);
 
-    const { error } = await supabase
-      .from('pricing_tiers')
-      .update({
-        display_name_en: editForm.display_name_en,
-        display_name_rw: editForm.display_name_rw,
-        price_rwf: editForm.price_rwf,
-        savings_rwf: editForm.savings_rwf,
-        features_en: editForm.features_en,
-        features_rw: editForm.features_rw,
-        is_highlighted: editForm.is_highlighted,
-        is_active: editForm.is_active,
-      })
-      .eq('id', editingId);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
 
-    setSaving(false);
+      const res = await fetch('/api/admin/pricing/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: editingId, ...editForm }),
+      });
 
-    if (error) {
-      setSaveError(error.message);
-      setMessage({ type: 'error', text: `Failed to save: ${error.message}` });
-    } else {
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Request failed (${res.status})`);
+      }
+
       setMessage({ type: 'success', text: 'Pricing tier updated successfully!' });
       setEditingId(null);
       setEditForm({});
       loadTiers();
+    } catch (e: any) {
+      setSaveError(e?.message || 'Failed to save');
+      setMessage({ type: 'error', text: `Failed to save: ${e?.message || 'Unknown error'}` });
+    } finally {
+      setSaving(false);
     }
   };
 
