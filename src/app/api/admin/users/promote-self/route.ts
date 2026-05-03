@@ -58,7 +58,14 @@ export async function POST(request: NextRequest) {
     const clientForWrite = admin ?? supabase;
     const { error: upErr } = await clientForWrite
       .from('profiles')
-      .upsert({ id: userRes.user.id, is_admin: true }, { onConflict: 'id' });
+      .upsert(
+        { 
+          id: userRes.user.id, 
+          email: userRes.user.email,
+          is_admin: true 
+        }, 
+        { onConflict: 'id' }
+      );
 
     if (upErr) {
       return NextResponse.json({ error: upErr.message }, { status: 400 });
