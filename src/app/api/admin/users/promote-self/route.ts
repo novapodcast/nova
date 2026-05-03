@@ -56,14 +56,17 @@ export async function POST(request: NextRequest) {
     }
 
     const clientForWrite = admin ?? supabase;
+    const nowIso = new Date().toISOString();
     const { error: upErr } = await clientForWrite
       .from('profiles')
       .upsert(
-        { 
-          id: userRes.user.id, 
+        {
+          id: userRes.user.id,
           email: userRes.user.email,
-          is_admin: true 
-        }, 
+          is_admin: true,
+          updated_at: nowIso,
+          created_at: nowIso,
+        },
         { onConflict: 'id' }
       );
 
