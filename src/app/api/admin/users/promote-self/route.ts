@@ -5,8 +5,10 @@ import { createClient } from '@supabase/supabase-js';
 function isAdminEmailServer(email: string | null | undefined): boolean {
   if (!email) return false;
   const raw = process.env.ADMIN_EMAILS || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '';
-  if (!raw) return false;
-  const list = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const defaults = ['admin@nova.co.rw', 'novapodcast2019@gmail.com'];
+  const list = Array.from(new Set([...(raw ? raw.split(',') : []), ...defaults]))
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   return list.includes(email.toLowerCase());
 }
 
