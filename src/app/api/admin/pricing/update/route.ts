@@ -42,11 +42,25 @@ export async function POST(request: NextRequest) {
     });
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userRes?.user?.email) {
+    if (userErr || !userRes?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!isAdminEmailServer(userRes.user.email)) {
+    // Primary check: server-side role flag
+    let isAdmin = false;
+    const { data: profile, error: profErr } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userRes.user.id)
+      .single();
+    if (!profErr && profile?.is_admin) isAdmin = true;
+
+    // Fallback: email allowlist (to avoid lockout before flag is set)
+    if (!isAdmin && userRes.user.email) {
+      isAdmin = isAdminEmailServer(userRes.user.email);
+    }
+
+    if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
