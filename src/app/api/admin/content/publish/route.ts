@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const clientForWrite = admin ?? supabase;
     const { error: publishErr } = await clientForWrite
       .from('episodes')
-      .update({ published_at: new Date().toISOString() })
+      .update({ status: 'published', published_at: new Date().toISOString() })
       .eq('id', body.id);
 
     if (publishErr) {

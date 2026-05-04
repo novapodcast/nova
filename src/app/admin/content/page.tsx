@@ -36,8 +36,18 @@ export default function AdminContentPage() {
   const [predefinedCategories, setPredefinedCategories] = useState<Category[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
+    title_en: '',
+    title_rw: '',
+    description_en: '',
+    description_rw: '',
+    slug: '',
+    status: 'draft',
+    scheduled_at: '' as string | '',
+    meta_title_en: '',
+    meta_title_rw: '',
+    meta_description_en: '',
+    meta_description_rw: '',
+    og_image_url: '',
     audio_url: '',
     cover_image_url: '',
     duration_seconds: 0,
@@ -107,8 +117,18 @@ export default function AdminContentPage() {
   function startEdit(ep: Episode) {
     setEditingId(ep.id);
     setFormData({
-      title: ep.title,
-      description: ep.description || '',
+      title_en: (ep as any).title_en || (ep as any).title || '',
+      title_rw: (ep as any).title_rw || '',
+      description_en: (ep as any).description_en || (ep as any).description || '',
+      description_rw: (ep as any).description_rw || '',
+      slug: (ep as any).slug || '',
+      status: (ep as any).status || ((ep as any).published_at ? 'published' : 'draft'),
+      scheduled_at: (ep as any).scheduled_at || '',
+      meta_title_en: (ep as any).meta_title_en || '',
+      meta_title_rw: (ep as any).meta_title_rw || '',
+      meta_description_en: (ep as any).meta_description_en || '',
+      meta_description_rw: (ep as any).meta_description_rw || '',
+      og_image_url: (ep as any).og_image_url || '',
       audio_url: ep.audio_url || '',
       cover_image_url: ep.cover_image_url || '',
       duration_seconds: ep.duration_seconds || 0,
@@ -121,8 +141,18 @@ export default function AdminContentPage() {
   function startNew() {
     setEditingId(null);
     setFormData({
-      title: '',
-      description: '',
+      title_en: '',
+      title_rw: '',
+      description_en: '',
+      description_rw: '',
+      slug: '',
+      status: 'draft',
+      scheduled_at: '',
+      meta_title_en: '',
+      meta_title_rw: '',
+      meta_description_en: '',
+      meta_description_rw: '',
+      og_image_url: '',
       audio_url: '',
       cover_image_url: '',
       duration_seconds: 0,
@@ -282,10 +312,15 @@ export default function AdminContentPage() {
     );
   }
 
-  const filteredEpisodes = episodes.filter((ep) =>
-    ep.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    ep.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEpisodes = episodes.filter((ep) => {
+    const e: any = ep as any;
+    const t1 = (e.title_en || e.title || '').toLowerCase();
+    const t2 = (e.title_rw || '').toLowerCase();
+    const d1 = (e.description_en || e.description || '').toLowerCase();
+    const d2 = (e.description_rw || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    return t1.includes(q) || t2.includes(q) || d1.includes(q) || d2.includes(q);
+  });
 
   return (
     <div className="container py-12 md:py-16">
@@ -318,23 +353,124 @@ export default function AdminContentPage() {
             {editingId ? 'Edit Episode' : 'New Episode'}
           </h2>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Title</label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Title (EN)</label>
+                <input
+                  type="text"
+                  value={formData.title_en}
+                  onChange={(e) => setFormData({ ...formData, title_en: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Title (RW)</label>
+                <input
+                  type="text"
+                  value={formData.title_rw}
+                  onChange={(e) => setFormData({ ...formData, title_rw: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Description (EN)</label>
+                <textarea
+                  value={formData.description_en}
+                  onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Description (RW)</label>
+                <textarea
+                  value={formData.description_rw}
+                  onChange={(e) => setFormData({ ...formData, description_rw: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">Slug</label>
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  placeholder="auto-generated if empty"
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const base = formData.title_en || formData.title_rw;
+                    const slug = (base || '')
+                      .toLowerCase()
+                      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/(^-|-$)/g, '');
+                    setFormData({ ...formData, slug });
+                  }}
+                  className="px-3 py-2 bg-white/10 rounded-lg hover:bg-white/20"
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="published">Published</option>
+                </select>
+              </div>
+              {formData.status === 'scheduled' && (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium mb-1">Scheduled At</label>
+                  <input
+                    type="datetime-local"
+                    value={formData.scheduled_at ? new Date(formData.scheduled_at).toISOString().slice(0,16) : ''}
+                    onChange={(e) => setFormData({ ...formData, scheduled_at: new Date(e.target.value).toISOString() })}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="border-t border-white/10 pt-4">
+              <h3 className="text-sm font-semibold mb-3">SEO</h3>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm mb-1">Meta Title (EN)</label>
+                  <input value={formData.meta_title_en} onChange={(e)=>setFormData({ ...formData, meta_title_en: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Meta Title (RW)</label>
+                  <input value={formData.meta_title_rw} onChange={(e)=>setFormData({ ...formData, meta_title_rw: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Meta Description (EN)</label>
+                  <textarea value={formData.meta_description_en} onChange={(e)=>setFormData({ ...formData, meta_description_en: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg" rows={2}/>
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Meta Description (RW)</label>
+                  <textarea value={formData.meta_description_rw} onChange={(e)=>setFormData({ ...formData, meta_description_rw: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg" rows={2}/>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">OG Image URL</label>
+                  <input value={formData.og_image_url} onChange={(e)=>setFormData({ ...formData, og_image_url: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Categories</label>
