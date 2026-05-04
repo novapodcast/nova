@@ -23,3 +23,12 @@ body {
 .container-hero {
   background: radial-gradient(60% 60% at 50% 0%, rgba(0,255,0,0.08), rgba(0,0,0,0) 60%), #000;
 }
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

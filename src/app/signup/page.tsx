@@ -14,11 +14,21 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [termsError, setTermsError] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    setTermsError(false);
+
+    if (!agreedToTerms) {
+      setTermsError(true);
+      setError('You must agree to the Terms & Conditions to create an account.');
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setLoading(false);
@@ -81,6 +91,39 @@ export default function SignupPage() {
             required
           />
         </div>
+
+        {/* Terms & Conditions Checkbox */}
+        <div className={`border rounded-lg p-4 ${termsError ? 'border-red-500/50 bg-red-500/5' : 'border-white/10 bg-white/5'}`}>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => {
+                setAgreedToTerms(e.target.checked);
+                setTermsError(false);
+              }}
+              className="mt-1 w-4 h-4 rounded border-white/20 bg-white/10 text-primary focus:ring-primary focus:ring-offset-0"
+            />
+            <span className="text-sm leading-relaxed">
+              I have read and agree to Nova's{' '}
+              <Link href="/terms" className="text-primary hover:underline" target="_blank">
+                Terms & Conditions
+              </Link>
+              . By creating an account I confirm I am at least 13 years old and accept all terms stated therein.
+            </span>
+          </label>
+          {termsError && (
+            <div className="mt-2 text-xs text-red-400 flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              You must agree to the Terms & Conditions to continue.
+            </div>
+          )}
+        </div>
+
         {error && <div className="text-red-400 text-sm">{error}</div>}
         {info && <div className="text-green-400 text-sm">{info}</div>}
         <button

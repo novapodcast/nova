@@ -16,6 +16,16 @@ interface Episode {
   categories?: string[] | null;
 }
 
+const CATEGORIES = [
+  { slug: 'ijuru', name_en: 'Heaven', name_rw: 'IJURU', color: '#3b82f6' },
+  { slug: 'urugo', name_en: 'Home', name_rw: 'URUGO', color: '#8b5cf6' },
+  { slug: 'kwimenya', name_en: 'Self-Knowledge', name_rw: 'KWIMENYA', color: '#ec4899' },
+  { slug: 'ubumana', name_en: 'Community', name_rw: 'UBUMANA', color: '#f59e0b' },
+  { slug: 'kurera', name_en: 'Parenting', name_rw: 'KURERA', color: '#10b981' },
+  { slug: 'urukundo', name_en: 'Love', name_rw: 'URUKUNDO', color: '#ef4444' },
+  { slug: 'ubukire', name_en: 'Prosperity', name_rw: 'UBUKIRE', color: '#84cc16' },
+];
+
 export default function EpisodesPage() {
   const { language } = useLanguage();
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -86,25 +96,35 @@ export default function EpisodesPage() {
         />
       </div>
 
-      {!loading && allCategories.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap mb-6">
+      {/* Category Filter Chips */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
+        <button
+          className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${
+            selectedCategory === null
+              ? 'bg-primary text-black'
+              : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+          }`}
+          onClick={() => setSelectedCategory(null)}
+        >
+          {language === 'rw' ? 'Byose' : 'All'}
+        </button>
+        {CATEGORIES.map((cat) => (
           <button
-            className={`px-3 py-1.5 rounded-full text-sm ${selectedCategory === null ? 'bg-primary text-black' : 'bg-white/5 text-white hover:bg-white/10'}`}
-            onClick={() => setSelectedCategory(null)}
+            key={cat.slug}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${
+              selectedCategory === cat.name_rw
+                ? 'text-black'
+                : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+            }`}
+            style={{
+              backgroundColor: selectedCategory === cat.name_rw ? cat.color : undefined,
+            }}
+            onClick={() => setSelectedCategory(cat.name_rw)}
           >
-            All
+            {language === 'rw' ? cat.name_rw : cat.name_en}
           </button>
-          {allCategories.map((cat) => (
-            <button
-              key={cat}
-              className={`px-3 py-1.5 rounded-full text-sm ${selectedCategory === cat ? 'bg-primary text-black' : 'bg-white/5 text-white hover:bg-white/10'}`}
-              onClick={() => setSelectedCategory(cat)}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
       {loading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           {Array.from({ length: 8 }).map((_, i) => (
