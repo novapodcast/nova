@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
 import { supabase } from '@/lib/supabaseClient';
@@ -16,6 +16,7 @@ interface Episode {
   description_en?: string | null;
   description_rw?: string | null;
   cover_image_url: string | null;
+  audio_url: string | null;
   duration_seconds: number | null;
   published_at: string | null;
   podcast_id?: string | null;
@@ -24,6 +25,8 @@ interface Episode {
     title_en: string | null;
     title_rw: string | null;
   };
+
+
 }
 
 export default function EpisodeDetailPage({ params }: Props) {
@@ -32,6 +35,10 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isPlayingRef = useRef<boolean>(false);
+  const lastTimeRef = useRef<number>(0);
+  const accRef = useRef<number>(0);
 
   useEffect(() => {
     const cacheKey = `episode_${params.id}_v1`;
@@ -51,6 +58,7 @@ export default function EpisodeDetailPage({ params }: Props) {
           description_en,
           description_rw,
           cover_image_url,
+          audio_url,
           duration_seconds,
           published_at,
           podcast_id,
@@ -159,6 +167,72 @@ export default function EpisodeDetailPage({ params }: Props) {
     }
   };
 
+  const postListen = async (payload: { duration_seconds?: number; completed?: boolean }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+      await fetch('/api/metrics/listen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          episode_id: params.id,
+          client: 'web',
+          language,
+          duration_seconds: Math.max(0, Math.round(payload.duration_seconds || 0)),
+          completed: !!payload.completed,
+        }),
+      });
+    } catch {}
+  };
+
+  const handleAudioPlay = async () => {
+    isPlayingRef.current = true;
+    const el = audioRef.current;
+    lastTimeRef.current = el ? el.currentTime : 0;
+    // mark a start event (0 sec) to count a listen start
+    await postListen({ duration_seconds: 0, completed: false });
+  };
+
+  const handleAudioPause = async () => {
+    if (!isPlayingRef.current) return;
+    isPlayingRef.current = false;
+    if (accRef.current > 0) {
+      const toSend = accRef.current;
+      accRef.current = 0;
+      await postListen({ duration_seconds: toSend, completed: false });
+    }
+  };
+
+  const handleAudioEnded = async () => {
+    const el = audioRef.current;
+    const remaining = accRef.current;
+    accRef.current = 0;
+    if (remaining > 0) {
+      await postListen({ duration_seconds: remaining, completed: false });
+    }
+    await postListen({ duration_seconds: Math.round(el?.duration || el?.currentTime || 0), completed: true });
+    isPlayingRef.current = false;
+  };
+
+  const handleTimeUpdate = async () => {
+    const el = audioRef.current;
+    if (!isPlayingRef.current || !el) return;
+    const now = el.currentTime;
+    const delta = Math.max(0, now - lastTimeRef.current);
+    lastTimeRef.current = now;
+    accRef.current += delta;
+    if (accRef.current >= 15) {
+      const toSend = accRef.current;
+      accRef.current = 0;
+      await postListen({ duration_seconds: toSend, completed: false });
+    }
+  };
+
+  const handleListenNow = () => {
+    try { audioRef.current?.play(); } catch {}
+  };
+
   return (
     <>
       <Head>
@@ -204,7 +278,7 @@ export default function EpisodeDetailPage({ params }: Props) {
             )}
 
             <div className="flex gap-3">
-              <button className="px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
+              <button onClick={handleListenNow} className="px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
                 ▶ Listen Now
               </button>
               <button className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
@@ -214,6 +288,19 @@ export default function EpisodeDetailPage({ params }: Props) {
                 Share
               </button>
             </div>
+
+            {episode.audio_url && (
+              <audio
+                ref={audioRef}
+                src={episode.audio_url}
+                controls
+                className="w-full mt-4"
+                onPlay={handleAudioPlay}
+                onPause={handleAudioPause}
+                onEnded={handleAudioEnded}
+                onTimeUpdate={handleTimeUpdate}
+              />
+            )}
 
             {(episode.categories && episode.categories.length > 0) && (
               <div className="mt-4 flex gap-2 flex-wrap">
