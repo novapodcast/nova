@@ -13,12 +13,17 @@ type AnalyticsData = {
   recentSignups: number;
   topEpisodes: Array<{ title: string; favorites: number }>;
   revenueByPlan: Array<{ plan: string; revenue: number; count: number }>;
+  listensByEpisode?: Array<{ episode_id: string; title: string; listens: number }>;
+  listensByCategory?: Array<{ category: string; listens: number }>;
+  dailyListens?: Array<{ date: string; listens: number }>;
 };
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [start, setStart] = useState<string>('');
+  const [end, setEnd] = useState<string>('');
 
   useEffect(() => {
     let active = true;
@@ -55,7 +60,11 @@ export default function AdminAnalyticsPage() {
       const token = session?.access_token;
       if (!token) return;
 
-      const res = await fetch('/api/admin/analytics', {
+      const params = new URLSearchParams();
+      if (start) params.set('start', new Date(start).toISOString());
+      if (end) params.set('end', new Date(end).toISOString());
+
+      const res = await fetch(`/api/admin/analytics${params.toString() ? `?${params}` : ''}` , {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -141,6 +150,18 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="container py-12 md:py-16">
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row items-start md:items-end gap-3 mb-6">
+        <div>
+          <label className="block text-xs text-muted mb-1">Start</label>
+          <input type="date" value={start} onChange={(e)=>setStart(e.target.value)} className="px-3 py-2 rounded bg-white/5 border border-white/10" />
+        </div>
+        <div>
+          <label className="block text-xs text-muted mb-1">End</label>
+          <input type="date" value={end} onChange={(e)=>setEnd(e.target.value)} className="px-3 py-2 rounded bg-white/5 border border-white/10" />
+        </div>
+        <button onClick={fetchAnalytics} className="px-4 py-2 bg-primary text-black rounded-lg mt-4 md:mt-0">Apply</button>
+      </div>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Analytics Dashboard</h1>
@@ -216,6 +237,61 @@ export default function AdminAnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {/* Listens over time */}
+      {analytics.dailyListens && analytics.dailyListens.length > 0 && (
+        <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Daily Listens</h2>
+          <div className="space-y-2">
+            {analytics.dailyListens.map((d) => {
+              const max = Math.max(...analytics.dailyListens!.map(x => x.listens));
+              const pct = max > 0 ? Math.round((d.listens / max) * 100) : 0;
+              return (
+                <div key={d.date} className="flex items-center gap-3">
+                  <div className="w-24 text-xs text-muted">{d.date}</div>
+                  <div className="flex-1 h-2 bg-white/10 rounded">
+                    <div className="h-2 bg-primary rounded" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="w-10 text-right text-xs">{d.listens}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Top listened episodes */}
+      {analytics.listensByEpisode && analytics.listensByEpisode.length > 0 && (
+        <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Top Listened Episodes</h2>
+          <div className="space-y-3">
+            {analytics.listensByEpisode.slice(0, 10).map((ep, idx) => (
+              <div key={ep.episode_id} className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">{idx + 1}</div>
+                  <span className="font-medium">{ep.title}</span>
+                </div>
+                <span className="text-muted">▶️ {ep.listens} listens</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Listens by category */}
+      {analytics.listensByCategory && analytics.listensByCategory.length > 0 && (
+        <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
+          <h2 className="text-xl font-semibold mb-4">Listens by Category</h2>
+          <div className="space-y-3">
+            {analytics.listensByCategory.map((item) => (
+              <div key={item.category} className="flex justify-between items-center">
+                <div className="font-medium">{item.category}</div>
+                <div className="text-muted">{item.listens.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
         <h2 className="text-xl font-semibold mb-4">Top Episodes</h2>

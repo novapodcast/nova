@@ -68,6 +68,15 @@ export async function GET(request: NextRequest) {
 
     const clientForRead = admin ?? supabase;
 
+    // Parse date filters (fallback to last 30 days)
+    const { searchParams } = new URL(request.url);
+    const endParam = searchParams.get('end');
+    const startParam = searchParams.get('start');
+    const endAt = endParam ? new Date(endParam) : new Date();
+    const startAt = startParam ? new Date(startParam) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const startISO = startAt.toISOString();
+    const endISO = endAt.toISOString();
+
     const { count: totalUsers } = await clientForRead
       .from('profiles')
       .select('*', { count: 'exact', head: true });
@@ -125,6 +134,56 @@ export async function GET(request: NextRequest) {
       .select('amount_rwf, user_subscriptions(pricing_tiers(display_name_en))')
       .eq('status', 'completed');
 
+    // Optional: listens aggregations (if table exists and has data)
+    let listensByEpisode: Array<{ episode_id: string; title: string; listens: number }> = [];
+    let listensByCategory: Array<{ category: string; listens: number }> = [];
+    let dailyListens: Array<{ date: string; listens: number }> = [];
+    try {
+      // Count listens grouped by episode within date window
+      const { data: listenRows } = await clientForRead
+        .from('listens')
+        .select('episode_id, created_at')
+        .gte('created_at', startISO)
+        .lte('created_at', endISO);
+
+      const byEpisode = new Map<string, number>();
+      const byDate = new Map<string, number>();
+      for (const r of listenRows || []) {
+        byEpisode.set(r.episode_id, (byEpisode.get(r.episode_id) || 0) + 1);
+        const d = new Date(r.created_at).toISOString().slice(0, 10);
+        byDate.set(d, (byDate.get(d) || 0) + 1);
+      }
+
+      // Fetch episode titles and categories
+      const ids = Array.from(byEpisode.keys());
+      if (ids.length > 0) {
+        const { data: eps } = await clientForRead
+          .from('episodes')
+          .select('id, title_en, title_rw, categories')
+          .in('id', ids);
+
+        const catCounts = new Map<string, number>();
+        for (const ep of eps || []) {
+          const listens = byEpisode.get(ep.id) || 0;
+          const title = ep.title_en || ep.title_rw || 'Untitled';
+          listensByEpisode.push({ episode_id: ep.id, title, listens });
+
+          const cats: string[] = (ep as any).categories || [];
+          for (const c of cats) {
+            catCounts.set(c, (catCounts.get(c) || 0) + listens);
+          }
+        }
+        listensByEpisode.sort((a, b) => b.listens - a.listens);
+        listensByCategory = Array.from(catCounts.entries()).map(([category, listens]) => ({ category, listens }))
+          .sort((a, b) => b.listens - a.listens);
+      }
+
+      dailyListens = Array.from(byDate.entries()).map(([date, listens]) => ({ date, listens }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    } catch (e) {
+      // If listens table is not present, skip silently
+    }
+
     const revenueByPlan: Record<string, { revenue: number; count: number }> = {};
     paymentsWithPlan?.forEach((p: any) => {
       const plan = p.user_subscriptions?.pricing_tiers?.display_name_en || 'Unknown';
@@ -150,6 +209,9 @@ export async function GET(request: NextRequest) {
       recentSignups: recentSignups || 0,
       topEpisodes,
       revenueByPlan: revenueByPlanArray,
+      listensByEpisode,
+      listensByCategory,
+      dailyListens,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
