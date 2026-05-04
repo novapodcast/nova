@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
 import NewsletterSignup from '../components/NewsletterSignup';
-import HeroCarousel from '../components/HeroCarousel';
+import HeroCarousel, { CarouselSlide } from '../components/HeroCarousel';
 import { supabase } from '@/lib/supabaseClient';
 
 interface Episode {
@@ -20,6 +20,7 @@ interface Episode {
 export default function HomePage() {
   const { language } = useLanguage();
   const [featuredEpisodes, setFeaturedEpisodes] = useState<Episode[]>([]);
+  const [slides, setSlides] = useState<CarouselSlide[]>([]);
 
   useEffect(() => {
     async function loadFeatured() {
@@ -32,7 +33,16 @@ export default function HomePage() {
       
       if (data) setFeaturedEpisodes(data);
     }
+    async function loadSlides() {
+      const { data } = await supabase
+        .from('carousel_slides')
+        .select('title_en, title_rw, subtitle_en, subtitle_rw, description_en, description_rw, cta_label_en, cta_label_rw, cta_url, background_image_url, background_color')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      if (data) setSlides(data as CarouselSlide[]);
+    }
     loadFeatured();
+    loadSlides();
   }, []);
 
   const getCategoryColor = (categories?: string[] | null) => {
@@ -59,7 +69,7 @@ export default function HomePage() {
   return (
     <div>
       {/* Hero Carousel */}
-      <HeroCarousel language={language} />
+      <HeroCarousel language={language} slides={slides} />
 
       {/* Featured Episodes - NFT Style Grid */}
       <section className="container py-12 md:py-16">

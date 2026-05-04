@@ -2,55 +2,61 @@
 import { useState, useEffect } from 'react';
 import AudioWaveform from './AudioWaveform';
 
-interface Slide {
-  badge: string;
-  title: string;
-  titleRw: string;
-  subtitle: string;
-  subtitleRw: string;
-  description: string;
-  descriptionRw: string;
+export interface CarouselSlide {
+  badge?: string;
+  title_en: string;
+  title_rw: string;
+  subtitle_en?: string | null;
+  subtitle_rw?: string | null;
+  description_en?: string | null;
+  description_rw?: string | null;
+  cta_label_en?: string | null;
+  cta_label_rw?: string | null;
+  cta_url?: string | null;
+  background_image_url?: string | null;
+  background_color?: string | null;
 }
 
-const slides: Slide[] = [
+const defaultSlides: CarouselSlide[] = [
   {
     badge: 'INKURU · UBUKIRE',
-    title: 'Prosperity of the Heart',
-    titleRw: 'Ubukire bw\'Umutima',
-    subtitle: 'New Series',
-    subtitleRw: 'Urukurikirane Rushya',
-    description: 'Discover true wealth that transforms from within',
-    descriptionRw: 'Vugurura ubukire nyabwo buhindura imbere',
+    title_en: 'Prosperity of the Heart',
+    title_rw: 'Ubukire bw\'Umutima',
+    subtitle_en: 'New Series',
+    subtitle_rw: 'Urukurikirane Rushya',
+    description_en: 'Discover true wealth that transforms from within',
+    description_rw: 'Vugurura ubukire nyabwo buhindura imbere',
   },
   {
     badge: 'INKURU · IJURU',
-    title: 'Heaven\'s Voice',
-    titleRw: 'Ijwi ry\'Ijuru',
-    subtitle: 'Featured',
-    subtitleRw: 'Byatoranijwe',
-    description: 'Hear the whispers of divine wisdom in daily life',
-    descriptionRw: 'Umva ijwi ry\'ubwenge bw\'Imana mu buzima bwa buri munsi',
+    title_en: 'Heaven\'s Voice',
+    title_rw: 'Ijwi ry\'Ijuru',
+    subtitle_en: 'Featured',
+    subtitle_rw: 'Byatoranijwe',
+    description_en: 'Hear the whispers of divine wisdom in daily life',
+    description_rw: 'Umva ijwi ry\'ubwenge bw\'Imana mu buzima bwa buri munsi',
   },
   {
     badge: 'INKURU · URUGO',
-    title: 'Building Strong Homes',
-    titleRw: 'Kubaka Inzu Ikomeye',
-    subtitle: 'Family Series',
-    subtitleRw: 'Urukurikirane rw\'Umuryango',
-    description: 'Foundations for families that last generations',
-    descriptionRw: 'Urufatiro rw\'imiryango irambye',
+    title_en: 'Building Strong Homes',
+    title_rw: 'Kubaka Inzu Ikomeye',
+    subtitle_en: 'Family Series',
+    subtitle_rw: 'Urukurikirane rw\'Umuryango',
+    description_en: 'Foundations for families that last generations',
+    description_rw: 'Urufatiro rw\'imiryango irambye',
   },
 ];
 
-export default function HeroCarousel({ language = 'en' }: { language?: string }) {
+export default function HeroCarousel({ language = 'en', slides }: { language?: string; slides?: CarouselSlide[] }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const data = slides && slides.length ? slides : defaultSlides;
 
   useEffect(() => {
     const interval = setInterval(() => {
       setIsTransitioning(true);
       setTimeout(() => {
-        setActiveSlide((prev) => (prev + 1) % slides.length);
+        setActiveSlide((prev) => (prev + 1) % data.length);
         setIsTransitioning(false);
       }, 300);
     }, 5000);
@@ -67,7 +73,7 @@ export default function HeroCarousel({ language = 'en' }: { language?: string })
     }, 300);
   };
 
-  const currentSlide = slides[activeSlide];
+  const currentSlide = data[activeSlide];
 
   return (
     <div className="relative min-h-[320px] md:min-h-[360px] flex items-end overflow-hidden">
@@ -101,17 +107,17 @@ export default function HeroCarousel({ language = 'en' }: { language?: string })
 
             {/* Subtitle */}
             <div className="text-xs font-mono uppercase tracking-wider text-muted/60 mb-2">
-              {language === 'rw' ? currentSlide.subtitleRw : currentSlide.subtitle}
+              {language === 'rw' ? currentSlide.subtitle_rw || '' : currentSlide.subtitle_en || ''}
             </div>
 
             {/* Title */}
             <h1 className="text-3xl md:text-5xl font-bold mb-3 leading-tight">
-              {language === 'rw' ? currentSlide.titleRw : currentSlide.title}
+              {language === 'rw' ? currentSlide.title_rw : currentSlide.title_en}
             </h1>
 
             {/* Description */}
             <p className="text-sm md:text-base text-muted mb-6 max-w-lg">
-              {language === 'rw' ? currentSlide.descriptionRw : currentSlide.description}
+              {language === 'rw' ? currentSlide.description_rw || '' : currentSlide.description_en || ''}
             </p>
 
             {/* Actions */}
@@ -120,7 +126,7 @@ export default function HeroCarousel({ language = 'en' }: { language?: string })
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                {language === 'rw' ? 'Tangira Kumva' : 'Play Now'}
+                {language === 'rw' ? (currentSlide.cta_label_rw || 'Tangira Kumva') : (currentSlide.cta_label_en || 'Play Now')}
               </button>
               <button className="px-5 py-2.5 rounded-lg border border-white/20 text-white font-semibold text-sm hover:bg-white/5 transition">
                 {language === 'rw' ? 'Reba Byinshi' : 'View Plans'}
@@ -130,7 +136,7 @@ export default function HeroCarousel({ language = 'en' }: { language?: string })
 
           {/* Dots */}
           <div className="flex gap-2 mt-6">
-            {slides.map((_, index) => (
+            {data.map((_, index) => (
               <button
                 key={index}
                 onClick={() => goToSlide(index)}
