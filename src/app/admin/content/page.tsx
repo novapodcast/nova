@@ -19,11 +19,21 @@ type Episode = {
   created_at: string;
 };
 
+type Category = {
+  id: string;
+  slug: string;
+  name_en: string;
+  name_rw: string;
+  color: string;
+  sort_order: number;
+};
+
 export default function AdminContentPage() {
   const router = useRouter();
   const { language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [predefinedCategories, setPredefinedCategories] = useState<Category[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -41,6 +51,7 @@ export default function AdminContentPage() {
   const [useAudioUrl, setUseAudioUrl] = useState(false);
   const [useCoverUrl, setUseCoverUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -66,6 +77,7 @@ export default function AdminContentPage() {
       }
 
       fetchEpisodes();
+      fetchCategories();
       setLoading(false);
     });
     return () => { active = false; };
@@ -78,6 +90,17 @@ export default function AdminContentPage() {
       .order('created_at', { ascending: false });
     if (!error && data) {
       setEpisodes(data);
+    }
+  }
+
+  async function fetchCategories() {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (!error && data) {
+      setPredefinedCategories(data);
     }
   }
 
@@ -314,34 +337,103 @@ export default function AdminContentPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Categories</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {formData.categories.map((cat, idx) => (
-                  <span key={idx} className="px-2 py-1 text-xs rounded-full bg-white/10">{cat}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, categories: formData.categories.filter((c) => c !== cat) })}
-                      className="ml-1 text-muted hover:text-white"
-                    >×</button>
-                  </span>
-                ))}
+              <label className="block text-sm font-medium mb-2">Categories</label>
+              
+              {/* Selected Categories */}
+              {formData.categories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3 p-3 bg-black/20 rounded-lg border border-white/10">
+                  {formData.categories.map((cat, idx) => {
+                    const predefined = predefinedCategories.find(c => c.name_rw === cat || c.name_en === cat);
+                    const color = predefined?.color || '#666';
+                    return (
+                      <span
+                        key={idx}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-2"
+                        style={{
+                          backgroundColor: `${color}20`,
+                          color: color,
+                          border: `1px solid ${color}40`,
+                        }}
+                      >
+                        {cat}
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, categories: formData.categories.filter((c) => c !== cat) })}
+                          className="hover:opacity-70 font-bold"
+                        >×</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Predefined Categories */}
+              <div className="mb-3">
+                <p className="text-xs text-muted mb-2">📌 Predefined Categories (click to add):</p>
+                <div className="flex flex-wrap gap-2">
+                  {predefinedCategories.map((cat) => {
+                    const isSelected = formData.categories.includes(cat.name_rw);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          if (!isSelected) {
+                            setFormData({ ...formData, categories: [...formData.categories, cat.name_rw] });
+                          }
+                        }}
+                        disabled={isSelected}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{
+                          backgroundColor: isSelected ? `${cat.color}40` : `${cat.color}20`,
+                          color: cat.color,
+                          border: `1px solid ${cat.color}${isSelected ? '60' : '40'}`,
+                        }}
+                      >
+                        {cat.name_rw} · {cat.name_en}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <input
-                type="text"
-                placeholder="Add category and press Enter (e.g., Business)"
-                onKeyDown={(e) => {
-                  const input = e.currentTarget as HTMLInputElement;
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const v = input.value.trim();
-                    if (v && !formData.categories.includes(v)) {
-                      setFormData({ ...formData, categories: [...formData.categories, v] });
-                      input.value = '';
-                    }
-                  }
-                }}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+
+              {/* Custom Category Input */}
+              <div>
+                <p className="text-xs text-muted mb-2">✏️ Add Custom Category:</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customCategoryInput}
+                    onChange={(e) => setCustomCategoryInput(e.target.value)}
+                    placeholder="e.g., Business, Technology..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const v = customCategoryInput.trim();
+                        if (v && !formData.categories.includes(v)) {
+                          setFormData({ ...formData, categories: [...formData.categories, v] });
+                          setCustomCategoryInput('');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = customCategoryInput.trim();
+                      if (v && !formData.categories.includes(v)) {
+                        setFormData({ ...formData, categories: [...formData.categories, v] });
+                        setCustomCategoryInput('');
+                      }
+                    }}
+                    className="px-4 py-2 bg-primary/20 border border-primary/40 text-primary rounded-lg hover:bg-primary/30 transition text-sm font-semibold"
+                  >
+                    Add
+                  </button>
+                </div>
+                <p className="text-xs text-muted mt-1">💡 Tip: Use predefined categories for consistency, or add custom ones as needed.</p>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
