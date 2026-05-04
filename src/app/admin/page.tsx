@@ -62,6 +62,18 @@ export default function AdminPage() {
           <p className="text-sm text-muted">{t('admin.manageEpisodes', language)}</p>
         </Link>
 
+        <Link href="/admin/categories" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
+          <div className="text-sm text-muted mb-2">Categories</div>
+          <div className="text-xl font-semibold mb-2">Manage Categories</div>
+          <p className="text-sm text-muted">Bilingual names, colors, and order</p>
+        </Link>
+
+        <Link href="/admin/carousel" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
+          <div className="text-sm text-muted mb-2">Hero Carousel</div>
+          <div className="text-xl font-semibold mb-2">Manage Slides</div>
+          <p className="text-sm text-muted">EN/RW titles, CTAs, and scheduling</p>
+        </Link>
+
         <Link href="/admin/users" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
           <div className="text-sm text-muted mb-2">Users</div>
           <div className="text-xl font-semibold mb-2">User Management</div>
