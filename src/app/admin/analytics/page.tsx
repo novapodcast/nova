@@ -91,6 +91,9 @@ export default function AdminAnalyticsPage() {
       },
       topEpisodes: analytics.topEpisodes,
       revenueByPlan: analytics.revenueByPlan,
+      dailyListens: analytics.dailyListens ?? [],
+      listensByEpisode: analytics.listensByEpisode ?? [],
+      listensByCategory: analytics.listensByCategory ?? [],
       exportedAt: new Date().toISOString(),
     };
 
@@ -103,7 +106,7 @@ export default function AdminAnalyticsPage() {
       a.click();
       URL.revokeObjectURL(url);
     } else {
-      const csvRows = [
+      const csvRows: (string | number)[][] = [
         ['Metric', 'Value'],
         ['Total Users', analytics.totalUsers],
         ['Active Subscriptions', analytics.activeSubscriptions],
@@ -120,6 +123,19 @@ export default function AdminAnalyticsPage() {
         ['Plan', 'Revenue (RWF)', 'Subscribers'],
         ...analytics.revenueByPlan.map((p) => [p.plan, p.revenue, p.count]),
       ];
+
+      if (analytics.dailyListens && analytics.dailyListens.length > 0) {
+        csvRows.push([''], ['Daily Listens'], ['Date', 'Listens']);
+        analytics.dailyListens.forEach((d) => csvRows.push([d.date, d.listens]));
+      }
+      if (analytics.listensByEpisode && analytics.listensByEpisode.length > 0) {
+        csvRows.push([''], ['Listens by Episode'], ['Title', 'Listens']);
+        analytics.listensByEpisode.forEach((e) => csvRows.push([e.title, e.listens]));
+      }
+      if (analytics.listensByCategory && analytics.listensByCategory.length > 0) {
+        csvRows.push([''], ['Listens by Category'], ['Category', 'Listens']);
+        analytics.listensByCategory.forEach((c) => csvRows.push([c.category, c.listens]));
+      }
 
       const csv = csvRows.map((row) => row.join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
