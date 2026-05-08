@@ -1,11 +1,100 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
 import { supabase } from '@/lib/supabaseClient';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
+
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+type ListenQueueItem = {
+  id: string;
+  episode_id: string;
+  session_id: string;
+  duration_seconds: number;
+  completed: boolean;
+  language: string;
+  attempt: number;
+  next_retry_at: number;
+};
+
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 1000;
+const QUEUE_KEY = 'nova_listen_queue_v1';
+
+function getQueue(): ListenQueueItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setQueue(queue: ListenQueueItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+}
+
+function removeFromQueue(id: string): void {
+  const queue = getQueue();
+  setQueue(queue.filter((item) => item.id !== id));
+}
+
+function addToQueue(item: Omit<ListenQueueItem, 'id' | 'attempt' | 'next_retry_at'>): void {
+  const queue = getQueue();
+  const newItem: ListenQueueItem = {
+    ...item,
+    id: generateUUID(),
+    attempt: 0,
+    next_retry_at: Date.now(),
+  };
+  queue.push(newItem);
+  setQueue(queue);
+}
+
+function processQueueFlush(sendFn: (item: ListenQueueItem) => Promise<boolean>): void {
+  const now = Date.now();
+  const queue = getQueue();
+  queue.forEach((item) => {
+    if (item.next_retry_at <= now) {
+      sendFn(item).then((ok) => {
+        if (ok) {
+          removeFromQueue(item.id);
+        } else {
+          const nextAttempt = item.attempt + 1;
+          if (nextAttempt > MAX_RETRIES) {
+            removeFromQueue(item.id);
+            return;
+          }
+          const delay = Math.min(BASE_DELAY_MS * Math.pow(2, nextAttempt), 30000);
+          const updated: ListenQueueItem = {
+            ...item,
+            attempt: nextAttempt,
+            next_retry_at: now + delay,
+          };
+          const q = getQueue();
+          const idx = q.findIndex((i) => i.id === item.id);
+          if (idx !== -1) {
+            q[idx] = updated;
+            setQueue(q);
+          }
+        }
+      });
+    }
+  });
+}
 
 interface Props { params: { id: string } }
 
@@ -39,6 +128,8 @@ export default function EpisodeDetailPage({ params }: Props) {
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
   const accRef = useRef<number>(0);
+  const sessionIdRef = useRef<string>('');
+  const isOnlineRef = useRef<boolean>(true);
 
   useEffect(() => {
     const cacheKey = `episode_${params.id}_v1`;
@@ -88,13 +179,13 @@ export default function EpisodeDetailPage({ params }: Props) {
       if (ep.categories && ep.categories.length > 0) {
         const { data: related } = await supabase
           .from('episodes')
-          .select('id, title_en, title_rw, cover_image_url, duration_seconds, published_at, categories')
+          .select('id, title_en, title_rw, cover_image_url, audio_url, duration_seconds, published_at, categories')
           .eq('is_active', true)
           .neq('id', params.id)
           .limit(4);
-        
+
         if (related) {
-          const filtered = related.filter((r: any) => 
+          const filtered = related.filter((r: any) =>
             r.categories?.some((c: string) => ep.categories?.includes(c))
           );
           setRelatedEpisodes(filtered.slice(0, 4));
@@ -167,29 +258,78 @@ export default function EpisodeDetailPage({ params }: Props) {
     }
   };
 
-  const postListen = async (payload: { duration_seconds?: number; completed?: boolean }) => {
+  const sendListenItem = useCallback(async (item: ListenQueueItem): Promise<boolean> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) return;
-      await fetch('/api/metrics/listen', {
+      if (!token) return false;
+      const res = await fetch('/api/metrics/listen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          episode_id: params.id,
+          episode_id: item.episode_id,
           client: 'web',
-          language,
-          duration_seconds: Math.max(0, Math.round(payload.duration_seconds || 0)),
-          completed: !!payload.completed,
+          language: item.language,
+          duration_seconds: item.duration_seconds,
+          completed: item.completed,
+          session_id: item.session_id,
         }),
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const onOnline = () => {
+      isOnlineRef.current = true;
+      processQueueFlush(sendListenItem);
+    };
+    const onOffline = () => { isOnlineRef.current = false; };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    isOnlineRef.current = navigator.onLine;
+    const interval = setInterval(() => {
+      if (isOnlineRef.current) processQueueFlush(sendListenItem);
+    }, 30000);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(interval);
+    };
+  }, [sendListenItem]);
+
+  const postListen = async (payload: { duration_seconds?: number; completed?: boolean }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return;
+    const item = {
+      episode_id: params.id,
+      session_id: sessionIdRef.current || generateUUID(),
+      duration_seconds: Math.max(0, Math.round(payload.duration_seconds || 0)),
+      completed: !!payload.completed,
+      language,
+    };
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = item.session_id;
+    }
+    if (!isOnlineRef.current) {
+      addToQueue(item);
+      return;
+    }
+    const ok = await sendListenItem({ ...item, id: '', attempt: 0, next_retry_at: Date.now() });
+    if (!ok) {
+      addToQueue(item);
+    }
   };
 
   const handleAudioPlay = async () => {
     isPlayingRef.current = true;
     const el = audioRef.current;
     lastTimeRef.current = el ? el.currentTime : 0;
+    // Generate new session for each distinct play start
+    sessionIdRef.current = generateUUID();
     // mark a start event (0 sec) to count a listen start
     await postListen({ duration_seconds: 0, completed: false });
   };
