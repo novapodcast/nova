@@ -30,20 +30,20 @@ const defaultSlides: CarouselSlide[] = [
   {
     badge: 'INKURU · IJURU',
     title_en: 'Heaven\'s Voice',
-    title_rw: 'Ijwi ry\'Ijuru',
+    title_rw: 'Ijwi ryo mu Ijuru',
     subtitle_en: 'Featured',
     subtitle_rw: 'Byatoranijwe',
     description_en: 'Hear the whispers of divine wisdom in daily life',
-    description_rw: 'Umva ijwi ry\'ubwenge bw\'Imana mu buzima bwa buri munsi',
+    description_rw: 'Kumva ubutumwa budasanzwe bw\'Imana mu buzima bwa buri munsi',
   },
   {
     badge: 'INKURU · URUGO',
     title_en: 'Building Strong Homes',
-    title_rw: 'Kubaka Inzu Ikomeye',
+    title_rw: 'Kubaka Imiryango Ikomeye',
     subtitle_en: 'Family Series',
     subtitle_rw: 'Urukurikirane rw\'Umuryango',
     description_en: 'Foundations for families that last generations',
-    description_rw: 'Urufatiro rw\'imiryango irambye',
+    description_rw: 'Gushyiraho umusingi w\'imiryango ihamye izabaho ibihe n\'ibihe',
   },
 ];
 
