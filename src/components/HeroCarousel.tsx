@@ -21,11 +21,11 @@ const defaultSlides: CarouselSlide[] = [
   {
     badge: 'INKURU · UBUKIRE',
     title_en: 'Prosperity of the Heart',
-    title_rw: 'Ubukire bw\'Umutima',
+    title_rw: 'Ubutunzi bw\'Umutima',
     subtitle_en: 'New Series',
     subtitle_rw: 'Urukurikirane Rushya',
     description_en: 'Discover true wealth that transforms from within',
-    description_rw: 'Vugurura ubukire nyabwo buhindura imbere',
+    description_rw: 'Menya ubutunzi nyakuri buhindura ubuzima uhereye imbere mu mutima',
   },
   {
     badge: 'INKURU · IJURU',
