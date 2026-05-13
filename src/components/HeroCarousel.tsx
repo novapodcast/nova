@@ -84,7 +84,7 @@ export default function HeroCarousel({ language = 'en', slides }: { language?: s
       <div className="absolute inset-0 bg-gradient-radial from-primary/10 via-transparent to-transparent opacity-40" />
       
       {/* Waveform */}
-      <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-30">
+      <div className="absolute right-[-8%] top-1/2 hidden h-[65%] w-[38%] -translate-y-1/2 overflow-hidden opacity-20 md:block">
         <AudioWaveform className="w-full h-full" />
       </div>
 
