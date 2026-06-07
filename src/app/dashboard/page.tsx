@@ -7,6 +7,17 @@ import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
+type Health = {
+  timestamp: string;
+  mode: 'FULL' | 'DEMO' | 'SAFE';
+  db: { ok: boolean; mode: 'admin' | 'anon' | 'none' };
+  payments: { lastProcessedAt: string | null };
+  ipn: { lastReceivedAt: string | null };
+  reconciliation: { lastRunAt: string | null };
+  analytics: { status: 'ok' | 'fallback' | 'degraded'; lastEventAt: string | null };
+  subscriptions: { status: 'ok' | 'out_of_sync' | 'unknown' };
+};
+
 interface UserProfile {
   email: string;
   full_name: string | null;
@@ -16,7 +27,7 @@ interface UserProfile {
 interface Subscription {
   plan_name: string;
   status: string;
-  current_period_end: string | null;
+  expires_at: string | null;
 }
 
 interface Favorite {
@@ -36,6 +47,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [health, setHealth] = useState<Health | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -68,7 +80,7 @@ export default function DashboardPage() {
       // Load subscription with plan details from pricing_tiers
       const { data: subData } = await supabase
         .from('user_subscriptions')
-        .select('status, current_period_end, plan_id')
+        .select('status, expires_at, current_period_end, plan_id')
         .eq('user_id', sessionData.session.user.id)
         .single();
       
@@ -94,7 +106,7 @@ export default function DashboardPage() {
         setSubscription({
           plan_name: planName,
           status: subData.status,
-          current_period_end: subData.current_period_end,
+          expires_at: (subData as any).expires_at || (subData as any).current_period_end || null,
         });
       }
 
@@ -129,6 +141,17 @@ export default function DashboardPage() {
     };
 
     loadUserData();
+    // Load system health (observability)
+    const loadHealth = async () => {
+      try {
+        const res = await fetch('/api/system/health');
+        if (res.ok) {
+          const json = await res.json();
+          setHealth(json as Health);
+        }
+      } catch {}
+    };
+    loadHealth();
     
     return () => {
       active = false;
@@ -150,6 +173,45 @@ export default function DashboardPage() {
 
   return (
     <div className="container py-12 md:py-16">
+      {/* System Status / Runtime Mode */}
+      <div className="bg-[var(--surface)] rounded-xl p-4 ring-1 ring-white/5 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted">System Status</div>
+          <div className="text-xs px-2 py-1 rounded bg-white/10">
+            Mode: {health?.mode || 'UNKNOWN'}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-sm">
+          <div className="rounded bg-black/30 p-3">
+            <div className="text-muted mb-1">Payments</div>
+            <div className="font-semibold">{health?.payments?.lastProcessedAt ? 'OK' : 'Degraded'}</div>
+            {!!health?.payments?.lastProcessedAt && (
+              <div className="text-xs text-muted mt-1">Last: {new Date(health.payments.lastProcessedAt).toLocaleString()}</div>
+            )}
+          </div>
+          <div className="rounded bg-black/30 p-3">
+            <div className="text-muted mb-1">IPN</div>
+            <div className="font-semibold">{health?.ipn?.lastReceivedAt ? 'OK' : 'Stale'}</div>
+            {!!health?.ipn?.lastReceivedAt && (
+              <div className="text-xs text-muted mt-1">Last: {new Date(health.ipn.lastReceivedAt).toLocaleString()}</div>
+            )}
+          </div>
+          <div className="rounded bg-black/30 p-3">
+            <div className="text-muted mb-1">Reconciliation</div>
+            <div className="font-semibold">{health?.reconciliation?.lastRunAt ? 'OK' : 'Pending'}</div>
+            {!!health?.reconciliation?.lastRunAt && (
+              <div className="text-xs text-muted mt-1">Last: {new Date(health.reconciliation.lastRunAt).toLocaleString()}</div>
+            )}
+          </div>
+          <div className="rounded bg-black/30 p-3">
+            <div className="text-muted mb-1">Analytics</div>
+            <div className="font-semibold">{health?.analytics?.status ? (health.analytics.status === 'ok' ? 'OK' : health.analytics.status === 'fallback' ? 'Fallback' : 'Degraded') : 'Unknown'}</div>
+            {!!health?.analytics?.lastEventAt && (
+              <div className="text-xs text-muted mt-1">Last: {new Date(health.analytics.lastEventAt).toLocaleString()}</div>
+            )}
+          </div>
+        </div>
+      </div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">{t('dashboard.title', language)}</h1>
@@ -167,9 +229,9 @@ export default function DashboardPage() {
               <div className="text-sm text-muted mb-3">
                 {t('dashboard.status', language)}: <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{subscription.status}</span>
               </div>
-              {subscription.current_period_end && (
+              {subscription.expires_at && (
                 <div className="text-xs text-muted mb-3">
-                  {t('dashboard.renews', language)}: {new Date(subscription.current_period_end).toLocaleDateString()}
+                  {t('dashboard.renews', language)}: {new Date(subscription.expires_at).toLocaleDateString()}
                 </div>
               )}
               <Link href="/pricing" className="text-sm text-primary hover:underline">{t('dashboard.changePlan', language)}</Link>
