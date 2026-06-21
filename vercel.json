@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/api/system/health", "destination": "/api/monitor/health" }
+  ],
   "crons": [{
     "path": "/api/cron/reconcile-payments",
     "schedule": "*/15 * * * *"
