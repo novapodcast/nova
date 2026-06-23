@@ -49,6 +49,7 @@ export const translations = {
       forMonths: 'mu mezi {{count}}',
       save: 'Uzigama {{percent}}%',
       choosePlan: 'Hitamo Gahunda',
+      subscribe: 'Iyandikisha',
       getStarted: 'Tangira',
       needCustom: 'Ukeneye gahunda yihariye?',
       contactUs: 'Twandikire',
@@ -56,6 +57,21 @@ export const translations = {
     },
     
     
+    // Checkout
+    checkout: {
+      title: 'Ishyura',
+      selectedPlan: 'Gahunda wahisemo',
+      paymentMethod: 'Uburyo bwo kwishyura',
+      phoneNumber: 'Numero ya telefoni',
+      processing: 'Birimo gutunganywa...',
+      payNow: 'Ishyura Ubu',
+      checkingStatus: 'Birimo kugenzura uko ubwishyu buhagaze...',
+      paymentSuccess: 'Ubwishyu bwagenze neza',
+      paymentPending: 'Ubwishyu buracyatunganywa',
+      paymentFailed: 'Ubwishyu ntibwagenze neza',
+      orderId: 'Order',
+    },
+
     // Auth
     auth: {
       signIn: 'Injira',
@@ -185,6 +201,10 @@ export const translations = {
       save: 'Bika',
       saving: 'Birimo kubikwa...',
       cancel: 'Hagarika',
+      month: 'ukwezi',
+      months: 'amezi',
+      viewDashboard: 'Reba ibiro',
+      tryAgain: 'Ongera ugerageze',
     },
   },
   
@@ -235,12 +255,28 @@ export const translations = {
       forMonths: 'for {{count}} months',
       save: 'Save {{percent}}%',
       choosePlan: 'Choose Plan',
+      subscribe: 'Subscribe',
       getStarted: 'Get Started',
       needCustom: 'Need a custom plan?',
       contactUs: 'Contact us',
       allPricesInRWF: 'All prices in Rwandan Francs (RWF).',
     },
     
+    // Checkout
+    checkout: {
+      title: 'Checkout',
+      selectedPlan: 'Selected Plan',
+      paymentMethod: 'Payment Method',
+      phoneNumber: 'Phone Number',
+      processing: 'Processing...',
+      payNow: 'Pay Now',
+      checkingStatus: 'Checking payment status...',
+      paymentSuccess: 'Payment Successful',
+      paymentPending: 'Payment Pending',
+      paymentFailed: 'Payment Failed',
+      orderId: 'Order',
+    },
+
     // Auth
     auth: {
       signIn: 'Sign in',
@@ -370,6 +406,10 @@ export const translations = {
       save: 'Save Changes',
       saving: 'Saving...',
       cancel: 'Cancel',
+      month: 'month',
+      months: 'months',
+      viewDashboard: 'View dashboard',
+      tryAgain: 'Try again',
     },
   },
 };
