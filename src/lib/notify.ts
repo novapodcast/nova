@@ -16,13 +16,33 @@ export async function sendPush(tokens: string[], message: { title?: string; body
 }
 
 import { paymentSuccessEmail, paymentFailedEmail, subscriptionExpiringEmail, subscriptionRenewedEmail, EmailTemplate } from './emailTemplates';
+import nodemailer from 'nodemailer';
 
 export async function sendEmail(to: string, subject: string, html: string) {
-  if (!process.env.SMTP_HOST) {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM || 'Nova <no-reply@nova.co.rw>';
+
+  if (!host || !user || !pass) {
     console.log('[email][dry-run]', { to, subject });
     return;
   }
-  // TODO: Implement SMTP provider (e.g., nodemailer) when SMTP_* envs are provided.
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    html,
+  });
 }
 
 // Typed email senders using templates

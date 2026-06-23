@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -9,13 +9,15 @@ export default function PaymentCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { language } = useLanguage();
-  const orderTrackingId = searchParams?.get('OrderTrackingId') || searchParams?.get('orderTrackingId');
+  const orderTrackingId = useMemo(() => searchParams?.get('OrderTrackingId') || searchParams?.get('orderTrackingId'), [searchParams]);
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'success' | 'pending' | 'failed'>('pending');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    let timer: any;
+    let attempts = 0;
     const checkStatus = async () => {
       if (!orderTrackingId) {
         setStatus('failed');
@@ -35,9 +37,13 @@ export default function PaymentCallbackPage() {
           if (statusDesc.includes('COMPLETED') || statusDesc.includes('SUCCESS')) {
             setStatus('success');
             setMessage(language === 'rw' ? 'Ubwishyu bwawe bwagenze neza!' : 'Payment completed successfully!');
+            setLoading(false);
+            return;
           } else if (statusDesc.includes('FAILED') || statusDesc.includes('INVALID')) {
             setStatus('failed');
             setMessage(language === 'rw' ? 'Ubwishyu ntibwagenze neza. Gerageza ukundi.' : 'Payment failed. Please try again.');
+            setLoading(false);
+            return;
           } else {
             setStatus('pending');
             setMessage(language === 'rw' ? 'Ubwishyu burakomeza gutunganywa...' : 'Payment is being processed...');
@@ -51,10 +57,27 @@ export default function PaymentCallbackPage() {
         setMessage(language === 'rw' ? 'Ubwishyu bwakirwe. Tuzakumenyesha iyo bwemejwe.' : 'Payment received. We will notify you once confirmed.');
       }
 
-      setLoading(false);
+      attempts += 1;
+      if (attempts < 6) {
+        timer = setTimeout(checkStatus, 10000); // poll every 10s up to 60s
+      } else {
+        setLoading(false);
+      }
     };
 
     checkStatus();
+    // Try to deep-link back to the mobile app best-effort
+    try {
+      const url = `nova://pesapal-callback?orderTrackingId=${encodeURIComponent(orderTrackingId || '')}`;
+      // on mobile browsers this may succeed; ignore errors
+      if (orderTrackingId) {
+        setTimeout(() => {
+          window.location.href = url;
+        }, 300);
+      }
+    } catch {}
+
+    return () => timer && clearTimeout(timer);
   }, [orderTrackingId, language]);
 
   if (loading) {
