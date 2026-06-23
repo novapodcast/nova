@@ -26,8 +26,16 @@ export default function PricingPage() {
   const [duration, setDuration] = useState<'1m' | '12m'>('1m');
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
+    // Check authentication status
+    const checkAuth = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      setIsAuthenticated(!!sessionData.session);
+    };
+    checkAuth();
+
     const cached = getCache<PricingTier[]>('pricing_tiers_v1');
     if (cached && cached.length) {
       setTiers(cached);
@@ -144,10 +152,10 @@ export default function PricingPage() {
               ))}
             </ul>
             <Link
-              href="/signup"
+              href={isAuthenticated ? "/dashboard" : "/signup"}
               className="w-full px-4 py-2.5 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition text-center block"
             >
-              {t('pricing.getStarted', language)}
+              {isAuthenticated ? t('common.viewDashboard', language) : t('pricing.getStarted', language)}
             </Link>
           </div>
         )}
@@ -216,14 +224,14 @@ export default function PricingPage() {
               </ul>
 
               <Link
-                href="/signup"
+                href={isAuthenticated ? `/checkout?plan=${currentTier.id}` : "/signup"}
                 className={`w-full px-4 py-2.5 rounded-lg font-semibold transition text-center block ${
                   currentTier.is_highlighted
                     ? 'bg-primary text-black hover:opacity-90'
                     : 'bg-white/5 text-white hover:bg-white/10'
                 }`}
               >
-                {t('pricing.choosePlan', language)}
+                {isAuthenticated ? t('pricing.subscribe', language) : t('pricing.choosePlan', language)}
               </Link>
             </div>
           );

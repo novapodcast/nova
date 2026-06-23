@@ -173,45 +173,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container py-12 md:py-16">
-      {/* System Status / Runtime Mode */}
-      <div className="bg-[var(--surface)] rounded-xl p-4 ring-1 ring-white/5 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-muted">System Status</div>
-          <div className="text-xs px-2 py-1 rounded bg-white/10">
-            Mode: {health?.mode || 'UNKNOWN'}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-sm">
-          <div className="rounded bg-black/30 p-3">
-            <div className="text-muted mb-1">Payments</div>
-            <div className="font-semibold">{health?.payments?.lastProcessedAt ? 'OK' : 'Degraded'}</div>
-            {!!health?.payments?.lastProcessedAt && (
-              <div className="text-xs text-muted mt-1">Last: {new Date(health.payments.lastProcessedAt).toLocaleString()}</div>
-            )}
-          </div>
-          <div className="rounded bg-black/30 p-3">
-            <div className="text-muted mb-1">IPN</div>
-            <div className="font-semibold">{health?.ipn?.lastReceivedAt ? 'OK' : 'Stale'}</div>
-            {!!health?.ipn?.lastReceivedAt && (
-              <div className="text-xs text-muted mt-1">Last: {new Date(health.ipn.lastReceivedAt).toLocaleString()}</div>
-            )}
-          </div>
-          <div className="rounded bg-black/30 p-3">
-            <div className="text-muted mb-1">Reconciliation</div>
-            <div className="font-semibold">{health?.reconciliation?.lastRunAt ? 'OK' : 'Pending'}</div>
-            {!!health?.reconciliation?.lastRunAt && (
-              <div className="text-xs text-muted mt-1">Last: {new Date(health.reconciliation.lastRunAt).toLocaleString()}</div>
-            )}
-          </div>
-          <div className="rounded bg-black/30 p-3">
-            <div className="text-muted mb-1">Analytics</div>
-            <div className="font-semibold">{health?.analytics?.status ? (health.analytics.status === 'ok' ? 'OK' : health.analytics.status === 'fallback' ? 'Fallback' : 'Degraded') : 'Unknown'}</div>
-            {!!health?.analytics?.lastEventAt && (
-              <div className="text-xs text-muted mt-1">Last: {new Date(health.analytics.lastEventAt).toLocaleString()}</div>
-            )}
-          </div>
-        </div>
-      </div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold mb-1">{t('dashboard.title', language)}</h1>
@@ -285,12 +246,6 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
-        <p className="text-sm text-blue-400">
-          <strong>{t('dashboard.tip', language)}:</strong> {t('dashboard.dashboardTip', language)}
-        </p>
       </div>
     </div>
   );
