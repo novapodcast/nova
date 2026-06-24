@@ -88,6 +88,8 @@ export const translations = {
       createOne: 'Kora konti',
       haveAccount: 'Ufite konti?',
       signInHere: 'Injira hano',
+      agreePrefix: 'Nemeye',
+      and: 'na',
     },
     
     // Dashboard
@@ -293,6 +295,8 @@ export const translations = {
       createOne: 'Create one',
       haveAccount: 'Have an account?',
       signInHere: 'Sign in here',
+      agreePrefix: 'I agree to the',
+      and: 'and',
     },
     
     // Dashboard

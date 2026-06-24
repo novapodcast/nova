@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -28,6 +29,7 @@ export default function CheckoutPage() {
   const [plan, setPlan] = useState<PricingTier | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'airtel' | 'mtn' | 'card'>('airtel');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [agree, setAgree] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -67,6 +69,11 @@ export default function CheckoutPage() {
 
   const handlePayment = async () => {
     if (!user || !plan) return;
+
+    if (!agree) {
+      alert(language === 'rw' ? 'Emeza Amabwiriza n’Ibanga' : 'Please agree to the Terms and Privacy first');
+      return;
+    }
 
     if (paymentMethod !== 'card' && !phoneNumber) {
       alert(language === 'rw' ? 'Injiza nimero ya telefoni' : 'Please enter phone number');
@@ -139,6 +146,7 @@ export default function CheckoutPage() {
       <div className="container py-12 md:py-16">
         <div className="text-muted">Loading...</div>
       </div>
+
     );
   }
 
@@ -208,6 +216,25 @@ export default function CheckoutPage() {
         )}
       </div>
 
+      {/* Terms Agreement */}
+      <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
+        <div className="flex items-start gap-2">
+          <input
+            id="agree"
+            type="checkbox"
+            checked={agree}
+            onChange={(e) => setAgree(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-white/20 bg-white/5"
+          />
+          <label htmlFor="agree" className="text-sm text-muted">
+            {t('auth.agreePrefix', language)}{' '}
+            <Link href="/terms" className="underline">{t('footer.terms', language)}</Link>{' '}
+            {t('auth.and', language)}{' '}
+            <Link href="/privacy" className="underline">{t('footer.privacy', language)}</Link>.
+          </label>
+        </div>
+      </div>
+
       {/* Action Buttons */}
       <div className="flex gap-4">
         <button
@@ -219,7 +246,7 @@ export default function CheckoutPage() {
         </button>
         <button
           onClick={handlePayment}
-          disabled={processing || (paymentMethod !== 'card' && !phoneNumber)}
+          disabled={processing || (paymentMethod !== 'card' && !phoneNumber) || !agree}
           className="flex-1 px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
         >
           {processing ? t('checkout.processing', language) : t('checkout.payNow', language)}

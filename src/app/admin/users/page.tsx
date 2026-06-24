@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { isAdminEmail } from '@/lib/admin';
+import { useAdminGuard } from '@/lib/useAdminGuard';
 
 type User = {
   id: string;
@@ -15,40 +14,18 @@ type User = {
 };
 
 export default function AdminUsersPage() {
-  const router = useRouter();
+  const { loading: guardLoading, authorized } = useAdminGuard();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState<'all' | 'admin' | 'user'>('all');
 
   useEffect(() => {
-    let active = true;
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!active) return;
-      const email = data.user?.email ?? null;
-      if (!email) {
-        router.replace('/login');
-        return;
-      }
-
-      const userId = data.user?.id;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single();
-
-      const isAdmin = profile?.is_admin || isAdminEmail(email);
-      if (!isAdmin) {
-        router.replace('/dashboard');
-        return;
-      }
-
+    if (authorized) {
       fetchUsers();
       setLoading(false);
-    });
-    return () => { active = false; };
-  }, [router]);
+    }
+  }, [authorized]);
 
   async function fetchUsers() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -100,10 +77,10 @@ export default function AdminUsersPage() {
     return matchesSearch && matchesRole;
   });
 
-  if (loading) {
+  if (guardLoading || !authorized || loading) {
     return (
       <div className="container py-12 md:py-16">
-        <div className="text-muted">Loading users…</div>
+        <div className="text-muted">{guardLoading ? 'Checking access…' : 'Loading users…'}</div>
       </div>
     );
   }

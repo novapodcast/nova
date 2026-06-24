@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { FAV_KEY } from '@/lib/constants';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
@@ -45,6 +47,15 @@ function setQueue(queue: ListenQueueItem[]): void {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
   } catch {}
+}
+
+function getFavs(): string[] {
+  if (typeof window === 'undefined') return [];
+  try { const raw = localStorage.getItem(FAV_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function setFavs(ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(ids)); } catch {}
 }
 
 function removeFromQueue(id: string): void {
@@ -124,6 +135,7 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
+  const [fav, setFav] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
@@ -194,6 +206,11 @@ export default function EpisodeDetailPage({ params }: Props) {
     };
 
     load();
+  }, [params.id]);
+
+  useEffect(() => {
+    const favs = getFavs();
+    setFav(favs.includes(params.id));
   }, [params.id]);
 
   const formatDuration = (seconds: number | null) => {
@@ -396,9 +413,14 @@ export default function EpisodeDetailPage({ params }: Props) {
           </Link>
 
         <div className="grid md:grid-cols-[300px_1fr] gap-8">
-          <div className="aspect-square rounded-xl bg-black/40 overflow-hidden ring-1 ring-white/5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={episode.cover_image_url ?? '/hero-placeholder.png'} alt={title} className="w-full h-full object-cover" />
+          <div className="relative aspect-square rounded-xl bg-black/40 overflow-hidden ring-1 ring-white/5">
+            <Image
+              src={episode.cover_image_url ?? '/hero-placeholder.png'}
+              alt={title}
+              fill
+              sizes="(max-width: 768px) 100vw, 300px"
+              className="object-cover"
+            />
           </div>
 
           <div>
@@ -421,8 +443,8 @@ export default function EpisodeDetailPage({ params }: Props) {
               <button onClick={handleListenNow} className="px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
                 ▶ Listen Now
               </button>
-              <button className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
-                + Add to Favorites
+              <button onClick={toggleFav} className={`px-6 py-3 rounded-lg font-semibold transition ${fav ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-white/5 text-white hover:bg-white/10'}`}>
+                {fav ? '✓ In Favorites' : '+ Add to Favorites'}
               </button>
               <button onClick={handleShare} className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
                 Share
@@ -469,9 +491,14 @@ export default function EpisodeDetailPage({ params }: Props) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
               {relatedEpisodes.map((ep) => (
                 <Link key={ep.id} href={`/episodes/${ep.id}`} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition">
-                  <div className="aspect-[4/3] rounded-lg bg-black/40 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ep.cover_image_url ?? '/hero-placeholder.png'} alt={ep.title_en ?? ep.title_rw ?? 'Episode'} className="w-full h-full object-cover" />
+                  <div className="relative aspect-[4/3] rounded-lg bg-black/40 overflow-hidden">
+                    <Image
+                      src={ep.cover_image_url ?? '/hero-placeholder.png'}
+                      alt={ep.title_en ?? ep.title_rw ?? 'Episode'}
+                      fill
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      className="object-cover"
+                    />
                   </div>
                   <div className="mt-3 text-xs text-muted">{t('episodes.episode', language)}</div>
                   <div className="text-white font-semibold line-clamp-2">{(language === 'rw' ? ep.title_rw : ep.title_en) ?? ep.title_en ?? ep.title_rw ?? t('episodes.untitled', language)}</div>

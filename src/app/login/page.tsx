@@ -11,6 +11,7 @@ export default function LoginPage() {
   const { language } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agree, setAgree] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -30,10 +31,26 @@ export default function LoginPage() {
       <h1 className="text-3xl font-bold mb-2">{t('auth.signIn', language)}</h1>
       <p className="text-muted mb-8">{t('auth.welcomeBack', language)}</p>
 
+      <div className="flex items-start gap-2 mb-4">
+        <input
+          id="agree"
+          type="checkbox"
+          checked={agree}
+          onChange={(e) => setAgree(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-white/20 bg-white/5"
+        />
+        <label htmlFor="agree" className="text-xs text-muted">
+          {t('auth.agreePrefix', language)}{' '}
+          <Link href="/terms" className="underline">{t('footer.terms', language)}</Link>{' '}
+          {t('auth.and', language)}{' '}
+          <Link href="/privacy" className="underline">{t('footer.privacy', language)}</Link>.
+        </label>
+      </div>
+
       <button
         onClick={handleGoogleSignIn}
         className="w-full px-4 py-3 rounded-md bg-primary text-black font-semibold hover:opacity-90 disabled:opacity-60 mb-4"
-        disabled={loading}
+        disabled={loading || !agree}
       >
         {loading ? t('auth.signingIn', language) : t('auth.continueWithGoogle', language)}
       </button>

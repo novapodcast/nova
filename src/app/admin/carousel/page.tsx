@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useAdminGuard } from '@/lib/useAdminGuard';
 
 type Slide = {
   id?: string;
@@ -22,14 +23,15 @@ type Slide = {
 };
 
 export default function AdminCarouselPage() {
+  const { loading: guardLoading, authorized } = useAdminGuard();
   const [slides, setSlides] = useState<Slide[]>([]);
   const [editing, setEditing] = useState<Slide | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchSlides();
-  }, []);
+    if (authorized) fetchSlides();
+  }, [authorized]);
 
   async function fetchSlides() {
     setLoading(true);
@@ -78,6 +80,14 @@ export default function AdminCarouselPage() {
     if (!confirm('Delete this slide?')) return;
     await supabase.from('carousel_slides').delete().eq('id', id);
     await fetchSlides();
+  }
+
+  if (guardLoading || !authorized) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="text-muted">Checking access…</div>
+      </div>
+    );
   }
 
   return (

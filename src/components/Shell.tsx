@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { LanguageProvider, useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
 import LanguageSwitcher from './LanguageSwitcher';
+import { setConsentFromBanner, track } from '../lib/analytics';
+import { COOKIE_CONSENT_KEY } from '../lib/constants';
 
 function Header() {
   const { language } = useLanguage();
@@ -28,6 +30,7 @@ function Header() {
         </button>
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
           <Link href="/episodes" className="hover:text-white">{t('nav.episodes', language)}</Link>
+          <Link href="/favorites" className="hover:text-white">{language === 'rw' ? 'Ibikunzwe' : 'Favorites'}</Link>
           <Link href="/pricing" className="hover:text-white">{t('nav.pricing', language)}</Link>
           <Link href="/about" className="hover:text-white">{t('nav.about', language)}</Link>
           <LanguageSwitcher />
@@ -58,6 +61,9 @@ function Header() {
             <nav className="flex flex-col gap-4 text-base text-muted">
               <Link href="/episodes" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {t('nav.episodes', language)}
+              </Link>
+              <Link href="/favorites" className="hover:text-white" onClick={() => setMobileOpen(false)}>
+                {language === 'rw' ? 'Ibikunzwe' : 'Favorites'}
               </Link>
               <Link href="/pricing" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {t('nav.pricing', language)}
@@ -100,10 +106,45 @@ function Footer() {
 }
 
 export default function Shell({ children }: { children: ReactNode }) {
+  const [consent, setConsent] = useState<'unknown' | 'accepted' | 'rejected'>('unknown');
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(COOKIE_CONSENT_KEY);
+      if (v === 'accepted' || v === 'rejected') setConsent(v);
+    } catch {}
+  }, []);
+
+  const accept = () => {
+    try { localStorage.setItem(COOKIE_CONSENT_KEY, 'accepted'); } catch {}
+    setConsent('accepted');
+    try { setConsentFromBanner('accepted'); track('consent_accept'); } catch {}
+  };
+  const reject = () => {
+    try { localStorage.setItem(COOKIE_CONSENT_KEY, 'rejected'); } catch {}
+    setConsent('rejected');
+    try { setConsentFromBanner('rejected'); track('consent_reject'); } catch {}
+  };
+
   return (
     <LanguageProvider>
       <Header />
       <main>{children}</main>
+      {consent === 'unknown' && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[95%] md:w-[720px]">
+          <div className="bg-[var(--surface)] border border-white/10 rounded-xl p-4 shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+              <div className="text-sm text-muted">
+                We use minimal cookies to improve your experience. See our <a className="underline" href="/privacy">Privacy</a> and <a className="underline" href="/terms">Terms</a>.
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={reject} className="px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-sm">Decline</button>
+                <button onClick={accept} className="px-3 py-1.5 rounded-md bg-primary text-black font-semibold hover:opacity-90 text-sm">Allow</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <Footer />
     </LanguageProvider>
   );

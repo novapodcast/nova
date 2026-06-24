@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { isAdminEmail } from '@/lib/admin';
+import { useAdminGuard } from '@/lib/useAdminGuard';
 import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration, formatFileSize } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/i18n';
@@ -29,8 +28,8 @@ type Category = {
 };
 
 export default function AdminContentPage() {
-  const router = useRouter();
   const { language } = useLanguage();
+  const { loading: guardLoading, authorized } = useAdminGuard();
   const [loading, setLoading] = useState(true);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [predefinedCategories, setPredefinedCategories] = useState<Category[]>([]);
@@ -64,34 +63,12 @@ export default function AdminContentPage() {
   const [customCategoryInput, setCustomCategoryInput] = useState('');
 
   useEffect(() => {
-    let active = true;
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!active) return;
-      const email = data.user?.email ?? null;
-      if (!email) {
-        router.replace('/login');
-        return;
-      }
-
-      const userId = data.user?.id;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single();
-
-      const isAdmin = profile?.is_admin || isAdminEmail(email);
-      if (!isAdmin) {
-        router.replace('/dashboard');
-        return;
-      }
-
+    if (authorized) {
       fetchEpisodes();
       fetchCategories();
       setLoading(false);
-    });
-    return () => { active = false; };
-  }, [router]);
+    }
+  }, [authorized]);
 
   async function fetchEpisodes() {
     const { data, error } = await supabase
@@ -304,10 +281,10 @@ export default function AdminContentPage() {
     }
   }
 
-  if (loading) {
+  if (guardLoading || !authorized || loading) {
     return (
       <div className="container py-12 md:py-16">
-        <div className="text-muted">Loading content…</div>
+        <div className="text-muted">{guardLoading ? 'Checking access…' : 'Loading content…'}</div>
       </div>
     );
   }

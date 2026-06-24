@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useAdminGuard } from '@/lib/useAdminGuard';
 
 type Category = {
   id?: string;
@@ -13,12 +14,13 @@ type Category = {
 };
 
 export default function AdminCategoriesPage() {
+  const { loading: guardLoading, authorized } = useAdminGuard();
   const [cats, setCats] = useState<Category[]>([]);
   const [editing, setEditing] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { fetchCats(); }, []);
+  useEffect(() => { if (authorized) fetchCats(); }, [authorized]);
 
   async function fetchCats() {
     setLoading(true);
@@ -51,6 +53,14 @@ export default function AdminCategoriesPage() {
     if (!confirm('Delete this category?')) return;
     await supabase.from('categories').delete().eq('id', id);
     await fetchCats();
+  }
+
+  if (guardLoading || !authorized) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="text-muted">Checking access…</div>
+      </div>
+    );
   }
 
   return (

@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
-import { isAdminEmail } from '@/lib/admin';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
 
@@ -14,19 +13,30 @@ export default function AdminPage() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    const verify = async () => {
+      const { data: userData } = await supabase.auth.getUser();
       if (!active) return;
-      const email = data.user?.email ?? null;
-      if (!email) {
-        router.replace('/login');
-        return;
-      }
-      if (!isAdminEmail(email)) {
+      const email = userData.user?.email ?? null;
+      if (!email) { router.replace('/login'); return; }
+
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) { router.replace('/login'); return; }
+
+      try {
+        const res = await fetch('/api/admin/guard', { headers: { Authorization: `Bearer ${token}` } });
+        if (!active) return;
+        if (res.ok) {
+          setLoading(false);
+        } else {
+          router.replace('/dashboard');
+        }
+      } catch {
+        if (!active) return;
         router.replace('/dashboard');
-        return;
       }
-      setLoading(false);
-    });
+    };
+    verify();
     return () => { active = false; };
   }, [router]);
 

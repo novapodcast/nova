@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { isAdminEmail } from '@/lib/admin';
+import { useAdminGuard } from '@/lib/useAdminGuard';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
 
@@ -22,8 +21,8 @@ interface PricingTier {
 }
 
 export default function AdminPricingPage() {
-  const router = useRouter();
   const { language } = useLanguage();
+  const { loading: guardLoading, authorized } = useAdminGuard();
   const [loading, setLoading] = useState(true);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -34,37 +33,11 @@ export default function AdminPricingPage() {
   const [allowlistOnly, setAllowlistOnly] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!active) return;
-      const user = data.user;
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
-
-      // Primary: check server role flag from profiles
-      let isAdmin = false;
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-      if (prof?.is_admin) isAdmin = true;
-
-      // Fallback: email allowlist to avoid lockout until flag set
-      const isAllowed = isAdminEmail(user.email);
-      if (!isAdmin && !isAllowed) {
-        router.replace('/dashboard');
-        return;
-      }
-      if (!isAdmin && isAllowed) setAllowlistOnly(true);
-
+    if (authorized) {
       setLoading(false);
       loadTiers();
-    });
-    return () => { active = false; };
-  }, [router]);
+    }
+  }, [authorized]);
 
   const loadTiers = async () => {
     const { data, error } = await supabase
@@ -142,7 +115,7 @@ export default function AdminPricingPage() {
     }
   };
 
-  if (loading) {
+  if (guardLoading || !authorized || loading) {
     return (
       <div className="container py-12 md:py-16">
         <div className="text-muted">Checking access…</div>

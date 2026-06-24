@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
@@ -98,10 +99,12 @@ export default function HomePage() {
                 {/* Thumbnail */}
                 <div className="relative aspect-[4/3] overflow-hidden bg-black/40">
                   {episode.cover_image_url ? (
-                    <img
+                    <Image
                       src={episode.cover_image_url}
                       alt={title}
-                      className="w-full h-full object-cover"
+                      fill
+                      sizes="(max-width: 768px) 50vw, 25vw"
+                      className="object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
