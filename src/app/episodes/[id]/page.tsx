@@ -390,6 +390,19 @@ export default function EpisodeDetailPage({ params }: Props) {
     try { audioRef.current?.play(); } catch {}
   };
 
+  const toggleFav = () => {
+    const ids = getFavs();
+    if (ids.includes(params.id)) {
+      const next = ids.filter((x) => x !== params.id);
+      setFav(false);
+      setFavs(next);
+    } else {
+      const next = Array.from(new Set([...ids, params.id]));
+      setFav(true);
+      setFavs(next);
+    }
+  };
+
   return (
     <>
       <Head>
