@@ -2,15 +2,51 @@
 
 import Link from 'next/link';
 import { ReactNode, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { LanguageProvider, useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
 import LanguageSwitcher from './LanguageSwitcher';
 import { setConsentFromBanner, track } from '../lib/analytics';
 import { COOKIE_CONSENT_KEY } from '../lib/constants';
+import { supabase } from '../lib/supabaseClient';
 
 function Header() {
+  const router = useRouter();
   const { language } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const init = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setUserEmail(data.session?.user?.email ?? null);
+      } catch {
+      }
+    };
+    init();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUserEmail(session?.user?.email ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setUserEmail(null);
+      router.push('/');
+    }
+  };
 
   return (
     <header className="w-full bg-black/60 backdrop-blur sticky top-0 z-50 border-b border-white/5">
@@ -34,9 +70,23 @@ function Header() {
           <Link href="/pricing" className="hover:text-white">{t('nav.pricing', language)}</Link>
           <Link href="/about" className="hover:text-white">{t('nav.about', language)}</Link>
           <LanguageSwitcher />
-          <Link href="/login" className="px-3 py-1.5 rounded-md bg-primary text-black font-semibold hover:opacity-90">
-            {t('nav.signIn', language)}
-          </Link>
+          {userEmail ? (
+            <div className="flex items-center gap-3">
+              <Link href="/dashboard" className="px-3 py-1.5 rounded-md bg-white/5 text-white hover:bg-white/10">
+                {t('nav.dashboard', language)}
+              </Link>
+              <button
+                onClick={handleSignOut}
+                className="px-3 py-1.5 rounded-md border border-white/10 hover:bg-white/5 text-white text-sm"
+              >
+                {t('common.signOut', language)}
+              </button>
+            </div>
+          ) : (
+            <Link href="/login" className="px-3 py-1.5 rounded-md bg-primary text-black font-semibold hover:opacity-90">
+              {t('nav.signIn', language)}
+            </Link>
+          )}
         </nav>
       </div>
       {mobileOpen && (
@@ -74,13 +124,34 @@ function Header() {
               <div className="pt-2">
                 <LanguageSwitcher />
               </div>
-              <Link
-                href="/login"
-                className="mt-2 px-3 py-2 rounded-md bg-primary text-black font-semibold hover:opacity-90 w-fit"
-                onClick={() => setMobileOpen(false)}
-              >
-                {t('nav.signIn', language)}
-              </Link>
+              {userEmail ? (
+                <div className="flex flex-col gap-3">
+                  <Link
+                    href="/dashboard"
+                    className="px-3 py-2 rounded-md bg-white/5 text-white hover:bg-white/10 w-fit"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {t('nav.dashboard', language)}
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setMobileOpen(false);
+                      handleSignOut();
+                    }}
+                    className="px-3 py-2 rounded-md border border-white/10 text-white hover:bg-white/5 text-left"
+                  >
+                    {t('common.signOut', language)}
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="mt-2 px-3 py-2 rounded-md bg-primary text-black font-semibold hover:opacity-90 w-fit"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  {t('nav.signIn', language)}
+                </Link>
+              )}
             </nav>
           </aside>
         </>
