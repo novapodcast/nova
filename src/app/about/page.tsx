@@ -45,22 +45,22 @@ export default function AboutPage() {
       <div className="container py-16 md:py-24">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold mb-8 text-center">
-            {language === 'rw' ? 'Inshingano yacu' : 'Our Mission'}
+            {language === 'rw' ? 'Intego Yacu' : 'Our Mission'}
           </h2>
           <div className="space-y-6 text-lg leading-relaxed text-muted">
             <p>
               {language === 'rw'
-                ? 'Nova yavutse mu nyota nziza — inyota y\'igisata gishaka ibisobanuro birenze urusaku rw\'ubuzima bwa none. Turi urubuga rw\'amajwi rushingiye kuri Kristo rwizera ko buri muntu afite imbuto y\'ubukomeye, itegereje gubyutsa n\'ijambo ryiza mu gihe cyiza.'
+                ? 'Nova yakomotse ku nyota idasanzwe — inyota y’igisekuru gishaka ibisobanuro n’intego y’ubuzima irenze urusaku n’urujijo by’isi ya none. Turi urubuga rw’amajwi rushingiye kuri Kristo, rwemera ko buri muntu afite muri we imbuto y’ubushobozi n’ubwiza Imana yamushyizemo, itegereje gukangurwa n’ijambo ryiza rivuzwe mu gihe gikwiye.'
                 : 'Nova was born out of a deep hunger — the hunger of a generation seeking meaning beyond the noise of modern life. We are a Christ-centred audio platform that believes every person carries within them a seed of greatness, waiting to be awakened by the right word at the right moment.'}
             </p>
             <p>
               {language === 'rw'
-                ? 'Binyuze mu nkuru zubatswe neza, inyigisho, n\'ibiganiro byateguwe mu byiciro birindwi by\'ubuzima — IJURU, URUGO, KWIMENYA, UBUMANA, KURERA, URUKUNDO, na UBUKIRE — Nova ivugana n\'umuntu wese: umwuka, ubwenge, umuryango, imibanire, n\'intego. Buri nkuru ni ubutumire bwo kujya mu bwimbitse, kubaho neza, no kuba uwo Imana yaguremye.'
+                ? 'Binyuze mu nkuru zateguwe neza, inyigisho n’ibiganiro byubakiye ku byiciro birindwi by’ubuzima — IJURU, URUGO, KWIMENYA, UBUMANA, KURERA, URUKUNDO, na UBUKIRE — Nova yita ku muntu wese uko yakabaye: umwuka, ibitekerezo, umuryango, imibanire n’intego y’ubuzima. Buri nkuru ni ubutumire bwo kujya mu mizi y’ibintu, kubaho neza kurushaho, no kuba uwo Imana yakuremeye kuba we.'
                 : 'Through carefully crafted stories, teachings, and conversations organised into seven life categories — IJURU, URUGO, KWIMENYA, UBUMANA, KURERA, URUKUNDO, and UBUKIRE — Nova speaks to the whole person: spirit, mind, family, relationships, and purpose. Each story is an invitation to go deeper, to live better, and to become who God created you to be.'}
             </p>
             <p>
               {language === 'rw'
-                ? 'Dushimira imizi zacu mu Rwanda, tuvuga Ikinyarwanda kandi dutwara umutima w\'abantu bacu — abantu b\'ubutwari, kwizera, n\'ibyiringiro bidasanzwe.'
+                ? 'Twishimira kuba dushingiye mu Rwanda, tuvuga Ikinyarwanda kandi twubakiye ku mutima w’Abanyarwanda — abantu barangwa no kwihangana, kwizera no kugira icyizere gikomeye cy’ejo hazaza.'
                 : 'We are proudly rooted in Rwanda, speaking in Kinyarwanda and carrying the heartbeat of our people — a people of resilience, faith, and extraordinary hope.'}
             </p>
           </div>

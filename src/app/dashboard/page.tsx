@@ -195,12 +195,18 @@ export default function DashboardPage() {
                   {t('dashboard.renews', language)}: {new Date(subscription.expires_at).toLocaleDateString()}
                 </div>
               )}
-              <Link href="/pricing" className="text-sm text-primary hover:underline">{t('dashboard.changePlan', language)}</Link>
+              <div className="flex gap-4">
+                <Link href="/pricing" className="text-sm text-primary hover:underline">{t('dashboard.changePlan', language)}</Link>
+                <Link href="/billing" className="text-sm text-primary hover:underline">Billing</Link>
+              </div>
             </>
           ) : (
             <>
               <div className="text-xl font-semibold mb-3">{t('dashboard.noActivePlan', language)}</div>
-              <Link href="/pricing" className="inline-block text-sm text-primary hover:underline">{t('dashboard.browsePlans', language)}</Link>
+              <div className="flex gap-4">
+                <Link href="/pricing" className="inline-block text-sm text-primary hover:underline">{t('dashboard.browsePlans', language)}</Link>
+                <Link href="/billing" className="inline-block text-sm text-primary hover:underline">Billing</Link>
+              </div>
             </>
           )}
         </div>

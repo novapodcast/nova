@@ -35,99 +35,124 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    if (statusDesc?.toString().toUpperCase().includes('COMPLETED')) {
-      // Idempotency: if already succeeded, skip
-      const { data: existing } = await supabaseAdmin
-        .from('payments')
-        .select('id, user_id, status, amount, currency')
-        .eq('transaction_id', merchantRef)
-        .single();
+    const upperStatus = statusDesc?.toString().toUpperCase();
+
+    // Helper: find payment by merchantRef, fallback to orderTrackingId in gateway_status
+    const findPayment = async () => {
+      if (merchantRef) {
+        const { data } = await supabaseAdmin!
+          .from('payments')
+          .select('id, user_id, status, amount, currency, transaction_id')
+          .eq('transaction_id', merchantRef)
+          .single();
+        if (data) return data as any;
+      }
+      // Fallback: search by orderTrackingId in gateway_status JSON
+      if (orderTrackingId) {
+        const { data } = await supabaseAdmin!
+          .from('payments')
+          .select('id, user_id, status, amount, currency, transaction_id')
+          .contains('gateway_status', { orderTrackingId: orderTrackingId.toString() })
+          .single();
+        if (data) {
+          // Fix transaction_id for future lookups
+          if (merchantRef && data.transaction_id !== merchantRef) {
+            await supabaseAdmin!.from('payments').update({ transaction_id: merchantRef }).eq('id', data.id);
+          }
+          return data as any;
+        }
+      }
+      return null;
+    };
+
+    if (upperStatus?.includes('COMPLETED')) {
+      const existing = await findPayment();
       if (existing?.status === 'succeeded') {
         await logEvent('ipn_duplicate', { merchantRef, orderTrackingId });
         return res.status(200).json({ ok: true, duplicate: true });
       }
 
-      // Mark payment succeeded
-      const { error: pErr } = await supabaseAdmin
-        .from('payments')
-        .update({ status: 'succeeded', gateway_status: payload })
-        .eq('transaction_id', merchantRef);
-      if (pErr) console.warn('[payments][update][warn]', pErr.message);
+      if (existing) {
+        // Mark payment succeeded
+        const { error: pErr } = await supabaseAdmin
+          .from('payments')
+          .update({ status: 'succeeded', gateway_status: payload })
+          .eq('id', existing.id);
+        if (pErr) console.warn('[payments][update][warn]', pErr.message);
 
-      // Extend/create subscription (example: +30 days)
-      const { data: payment } = await supabaseAdmin
-        .from('payments')
-        .select('user_id, amount, currency')
-        .eq('transaction_id', merchantRef)
-        .single();
+        const userId = existing.user_id;
+        if (userId) {
+          const { data: current } = await supabaseAdmin
+            .from('user_subscriptions')
+            .select('id, expires_at')
+            .eq('user_id', userId)
+            .single();
+          const base = current?.expires_at ? new Date(current.expires_at) : new Date();
+          const next = new Date(base.getTime());
+          next.setMonth(next.getMonth() + 1);
+          const upsert = {
+            user_id: userId,
+            status: 'active',
+            expires_at: next.toISOString(),
+          } as any;
+          if (current?.id) upsert.id = current.id;
+          const { error: sErr } = await supabaseAdmin.from('user_subscriptions').upsert(upsert).select().single();
+          if (sErr) console.warn('[subscriptions][upsert][warn]', sErr.message);
 
-      const userId = payment?.user_id;
-      if (userId) {
-        const { data: current } = await supabaseAdmin
-          .from('user_subscriptions')
-          .select('id, expires_at')
-          .eq('user_id', userId)
-          .single();
-        const base = current?.expires_at ? new Date(current.expires_at) : new Date();
-        const next = new Date(base.getTime());
-        next.setMonth(next.getMonth() + 1);
-        const upsert = {
-          user_id: userId,
-          status: 'active',
-          expires_at: next.toISOString(),
-        } as any;
-        if (current?.id) upsert.id = current.id;
-        const { error: sErr } = await supabaseAdmin.from('user_subscriptions').upsert(upsert).select().single();
-        if (sErr) console.warn('[subscriptions][upsert][warn]', sErr.message);
+          // Billing history (idempotent)
+          const { data: existingBilling } = await supabaseAdmin.from('billing_history').select('id').eq('transaction_id', merchantRef).limit(1);
+          if (!existingBilling || existingBilling.length === 0) {
+            await supabaseAdmin.from('billing_history').insert({
+              user_id: userId,
+              transaction_id: merchantRef,
+              amount: existing.amount || 0,
+              currency: existing.currency || 'RWF',
+              description: 'Subscription payment',
+            });
+          }
 
-        // Billing history
-        await supabaseAdmin.from('billing_history').insert({
-          user_id: userId,
-          transaction_id: merchantRef,
-          amount: payment?.amount || 0,
-          currency: payment?.currency || 'RWF',
-          description: 'Subscription payment',
-        });
+          // Success notifications
+          try {
+            const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', userId);
+            const expoTokens = (tokens || []).map((t: any) => t.token);
+            await sendPush(expoTokens, { title: 'Payment received', body: 'Your Nova subscription is active. Enjoy!', data: { type: 'payment_success', transaction_id: merchantRef } });
+          } catch {}
 
-        // Success notifications
+          try {
+            const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
+            const to = profile?.email || '';
+            const userName = profile?.full_name || '';
+            if (to) {
+              await sendPaymentSuccessEmail(to, userName, merchantRef, existing.amount || 0, existing.currency || 'RWF');
+            }
+          } catch {}
+        }
+      }
+      await logEvent('ipn_processed_success', { merchantRef, orderTrackingId, paymentFound: !!existing });
+    } else if (upperStatus?.includes('FAILED')) {
+      const existing = await findPayment();
+      if (existing) {
+        const { error: pErr } = await supabaseAdmin
+          .from('payments')
+          .update({ status: 'failed', gateway_status: payload })
+          .eq('id', existing.id);
+        if (pErr) console.warn('[payments][update][warn]', pErr.message);
+
+        // Send failure email
         try {
-          const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', userId);
-          const expoTokens = (tokens || []).map((t: any) => t.token);
-          await sendPush(expoTokens, { title: 'Payment received', body: 'Your Nova subscription is active. Enjoy!', data: { type: 'payment_success', transaction_id: merchantRef } });
-        } catch {}
-
-        try {
-          const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
-          const to = profile?.email || '';
-          const userName = profile?.full_name || '';
-          if (to) {
-            await sendPaymentSuccessEmail(to, userName, merchantRef, payment?.amount || 0, payment?.currency || 'RWF');
+          const userId = existing.user_id;
+          if (userId) {
+            const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
+            const to = profile?.email || '';
+            const userName = profile?.full_name || '';
+            if (to) {
+              await sendPaymentFailedEmail(to, userName, merchantRef, existing.amount || 0, existing.currency || 'RWF', statusDesc);
+            }
           }
         } catch {}
       }
-      await logEvent('ipn_processed_success', { merchantRef, orderTrackingId });
-    } else if (statusDesc?.toString().toUpperCase().includes('FAILED')) {
-      const { error: pErr } = await supabaseAdmin
-        .from('payments')
-        .update({ status: 'failed', gateway_status: payload })
-        .eq('transaction_id', merchantRef);
-      if (pErr) console.warn('[payments][update][warn]', pErr.message);
 
-      // Send failure email
-      try {
-        const { data: payment } = await supabaseAdmin.from('payments').select('user_id, amount, currency').eq('transaction_id', merchantRef).single();
-        const userId = payment?.user_id;
-        if (userId) {
-          const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
-          const to = profile?.email || '';
-          const userName = profile?.full_name || '';
-          if (to) {
-            await sendPaymentFailedEmail(to, userName, merchantRef, payment?.amount || 0, payment?.currency || 'RWF', statusDesc);
-          }
-        }
-      } catch {}
-
-      await logEvent('ipn_processed_failed', { merchantRef, orderTrackingId });
+      await logEvent('ipn_processed_failed', { merchantRef, orderTrackingId, paymentFound: !!existing });
     }
 
     return res.status(200).json({ ok: true });
