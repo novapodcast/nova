@@ -51,9 +51,9 @@ function Header() {
   return (
     <header className="w-full bg-black/60 backdrop-blur sticky top-0 z-50 border-b border-white/5">
       <div className="container flex items-center justify-between py-4">
-        <Link href="/" className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="Nova" className="h-7 w-7" />
-          <span className="text-xl font-bold text-white">Nova</span>
+        <Link href="/" className="flex items-center gap-2 group">
+          <img src="/favicon.svg" alt="Nova" className="h-7 w-7 transition-transform group-hover:scale-110" />
+          <span className="text-xl font-bold text-white tracking-tight">Nova</span>
         </Link>
         <button
           onClick={() => setMobileOpen(true)}
@@ -95,7 +95,7 @@ function Header() {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="fixed right-0 top-0 h-full w-72 bg-[var(--surface)] border-l border-white/10 z-[61] p-6 flex flex-col">
+          <aside className="fixed right-0 top-0 h-full w-72 bg-[var(--surface)] border-l border-white/10 z-[61] p-6 flex flex-col animate-slide-in-right">
             <div className="flex items-center justify-between mb-6">
               <span className="text-lg font-semibold text-white">Menu</span>
               <button
@@ -165,11 +165,40 @@ function Footer() {
 
   return (
     <footer className="mt-24 border-t border-white/5">
-      <div className="container py-10 text-sm text-muted flex flex-col md:flex-row items-center justify-between gap-4">
-        <p>{t('footer.copyright', language, { year: new Date().getFullYear() })}</p>
-        <div className="flex items-center gap-6">
-          <Link href="/terms" className="hover:text-white">{t('footer.terms', language)}</Link>
-          <Link href="/privacy" className="hover:text-white">{t('footer.privacy', language)}</Link>
+      <div className="container py-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div className="md:col-span-2">
+            <div className="flex items-center gap-2 mb-3">
+              <img src="/favicon.svg" alt="Nova" className="h-6 w-6" />
+              <span className="text-lg font-bold text-white">Nova</span>
+            </div>
+            <p className="text-sm text-muted max-w-sm leading-relaxed">{language === 'rw' ? 'Podcasts zituma ubuzima bwawe buhinduka, zivuga mu rurimi rwawe.' : 'Podcasts that transform your life, spoken in your language.'}</p>
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-white/80 mb-3">{language === 'rw' ? 'Ibyerekeye' : 'Explore'}</div>
+            <div className="flex flex-col gap-2 text-sm text-muted">
+              <Link href="/episodes" className="hover:text-white transition-colors">{t('nav.episodes', language)}</Link>
+              <Link href="/pricing" className="hover:text-white transition-colors">{t('nav.pricing', language)}</Link>
+              <Link href="/about" className="hover:text-white transition-colors">{t('nav.about', language)}</Link>
+              <Link href="/contact" className="hover:text-white transition-colors">{t('nav.contact', language)}</Link>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-white/80 mb-3">{language === 'rw' ? 'Amategeko' : 'Legal'}</div>
+            <div className="flex flex-col gap-2 text-sm text-muted">
+              <Link href="/terms" className="hover:text-white transition-colors">{t('footer.terms', language)}</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">{t('footer.privacy', language)}</Link>
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted">
+          <p>{t('footer.copyright', language, { year: new Date().getFullYear() })}</p>
+          <div className="flex items-center gap-3">
+            <a href="https://twitter.com/novapodcast" target="_blank" rel="noopener noreferrer" aria-label="X" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors text-xs font-bold">X</a>
+            <a href="https://instagram.com/novapodcast" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors text-xs font-bold">IG</a>
+            <a href="https://facebook.com/novapodcast" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors text-xs font-bold">FB</a>
+            <a href="https://youtube.com/@novapodcast" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors text-xs font-bold">YT</a>
+          </div>
         </div>
       </div>
     </footer>

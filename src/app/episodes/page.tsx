@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -83,7 +84,7 @@ export default function EpisodesPage() {
   }, [episodes, selectedCategory, searchQuery]);
 
   return (
-    <div className="container py-12 md:py-16">
+    <div className="container py-12 md:py-16 animate-fade-in-up">
       <h1 className="text-3xl font-bold mb-6">{t('episodes.title', language)}</h1>
       
       <div className="mb-6">
@@ -146,10 +147,15 @@ export default function EpisodesPage() {
       {!loading && visibleEpisodes.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           {visibleEpisodes.map((ep) => (
-            <Link key={ep.id} href={`/episodes/${ep.id}`} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition">
-              <div className="aspect-[4/3] rounded-lg bg-black/40 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={ep.cover_image_url ?? '/hero-placeholder.png'} alt={ep.title_en ?? ep.title_rw ?? 'Episode'} className="w-full h-full object-cover" />
+            <Link key={ep.id} href={`/episodes/${ep.id}`} className="group bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 hover:-translate-y-1 transition-all duration-300">
+              <div className="relative aspect-[4/3] rounded-lg bg-black/40 overflow-hidden">
+                <Image
+                  src={ep.cover_image_url ?? '/hero-placeholder.png'}
+                  alt={ep.title_en ?? ep.title_rw ?? 'Episode'}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                />
               </div>
               <div className="mt-3 text-xs text-muted">{t('episodes.episode', language)}</div>
               <div className="text-white font-semibold line-clamp-2">{(language === 'rw' ? ep.title_rw : ep.title_en) ?? ep.title_en ?? ep.title_rw ?? t('episodes.untitled', language)}</div>

@@ -35,26 +35,26 @@ export default function ContactPage() {
     }
   };
   return (
-    <div className="container py-12 md:py-16 max-w-2xl">
+    <div className="container py-12 md:py-20 max-w-2xl animate-fade-in-up">
       <h1 className="text-3xl font-bold mb-2">{t('contact.title', language)}</h1>
       <p className="text-muted mb-8">{t('contact.subtitle', language)}</p>
 
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-5 bg-[var(--surface)] rounded-2xl p-8 ring-1 ring-white/5" onSubmit={onSubmit}>
         <div>
-          <label className="block text-sm mb-1">{t('contact.name', language)}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-md bg-[var(--surface)] border border-white/10 px-3 py-2" placeholder="Your name" />
+          <label className="block text-sm mb-1.5 font-medium">{t('contact.name', language)}</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-white placeholder-white/30 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" placeholder="Your name" />
         </div>
         <div>
-          <label className="block text-sm mb-1">{t('auth.email', language)}</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-md bg-[var(--surface)] border border-white/10 px-3 py-2" placeholder="you@example.com" />
+          <label className="block text-sm mb-1.5 font-medium">{t('auth.email', language)}</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-white placeholder-white/30 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition" placeholder="you@example.com" />
         </div>
         <div>
-          <label className="block text-sm mb-1">{t('contact.message', language)}</label>
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full rounded-md bg-[var(--surface)] border border-white/10 px-3 py-2 min-h-[120px]" placeholder="How can we help?" />
+          <label className="block text-sm mb-1.5 font-medium">{t('contact.message', language)}</label>
+          <textarea value={message} onChange={(e) => setMessage(e.target.value)} className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-white placeholder-white/30 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition min-h-[140px] resize-y" placeholder="How can we help?" />
         </div>
-        <button type="submit" disabled={status==='loading'} className="px-4 py-2 rounded-md bg-primary text-black font-semibold hover:opacity-90 disabled:opacity-50">{status==='loading' ? 'Sending…' : t('contact.send', language)}</button>
-        {status==='success' && <div className="text-green-400 text-sm mt-2">Message sent!</div>}
-        {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
+        <button type="submit" disabled={status==='loading'} className="px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity">{status==='loading' ? 'Sending…' : t('contact.send', language)}</button>
+        {status==='success' && <div className="text-green-400 text-sm p-3 rounded-lg bg-green-500/10 border border-green-500/20 animate-fade-in-up">✓ Message sent! We'll get back to you soon.</div>}
+        {error && <div className="text-red-400 text-sm p-3 rounded-lg bg-red-500/10 border border-red-500/20">{error}</div>}
       </form>
     </div>
   );
