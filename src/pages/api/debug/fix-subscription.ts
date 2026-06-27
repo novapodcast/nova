@@ -76,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ok: true,
     action: 'deduplicated',
     keptId: keep.id,
-    deletedIds,
+    deletedIds: deleteIds,
     subscription: { ...keep, status: 'active', expires_at: next.toISOString() },
   });
 }
