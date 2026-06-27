@@ -41,6 +41,7 @@ export async function activateOrExtendSubscription(
     status: 'active',
     expires_at: next.toISOString(),
     plan_id: planId,
+    trial_end: next.toISOString(),
   };
 
   if (current) {
