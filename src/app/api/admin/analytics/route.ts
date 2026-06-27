@@ -94,9 +94,9 @@ export async function GET(request: NextRequest) {
 
     const { data: payments } = await clientForRead
       .from('payments')
-      .select('amount_rwf')
-      .eq('status', 'completed');
-    const totalRevenue = payments?.reduce((sum, p) => sum + (p.amount_rwf || 0), 0) || 0;
+      .select('amount, currency')
+      .eq('status', 'succeeded');
+    const totalRevenue = payments?.reduce((sum, p) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
 
     const { count: totalEpisodes } = await clientForRead
       .from('episodes')

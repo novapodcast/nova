@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
 import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from '../../../lib/notify';
+import { activateOrExtendSubscription } from '../../../lib/subscriptions';
 
 async function logEvent(type: string, payload: any) {
   if (!supabaseAdmin) return;
@@ -10,56 +11,8 @@ async function logEvent(type: string, payload: any) {
   } catch {}
 }
 
-async function activateSubscription(userId: string, merchantRef: string, amount: number, currency: string, durationMonths: number) {
+async function sendNotifications(userId: string, merchantRef: string, amount: number, currency: string) {
   if (!supabaseAdmin) return;
-
-  // Deduplicate: get all rows, keep most recent, delete rest
-  const { data: existingSubs } = await supabaseAdmin
-    .from('user_subscriptions')
-    .select('id, expires_at, updated_at')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false });
-
-  if (existingSubs && existingSubs.length > 1) {
-    const idsToDelete = existingSubs.slice(1).map((s: any) => s.id);
-    await supabaseAdmin.from('user_subscriptions').delete().in('id', idsToDelete);
-  }
-
-  const current = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
-  const base = current?.expires_at ? new Date(current.expires_at) : new Date();
-  const next = new Date(base.getTime());
-  next.setMonth(next.getMonth() + durationMonths);
-
-  if (current) {
-    const { error: sErr } = await supabaseAdmin
-      .from('user_subscriptions')
-      .update({ status: 'active', expires_at: next.toISOString() })
-      .eq('id', current.id);
-    if (sErr) console.warn('[confirm][subscription][warn]', sErr.message);
-  } else {
-    const { error: sErr } = await supabaseAdmin
-      .from('user_subscriptions')
-      .insert({ user_id: userId, status: 'active', expires_at: next.toISOString() });
-    if (sErr) console.warn('[confirm][subscription][warn]', sErr.message);
-  }
-
-  // Billing history (idempotent: check if already exists)
-  const { data: existingBilling } = await supabaseAdmin
-    .from('billing_history')
-    .select('id')
-    .eq('transaction_id', merchantRef)
-    .limit(1);
-  if (!existingBilling || existingBilling.length === 0) {
-    await supabaseAdmin.from('billing_history').insert({
-      user_id: userId,
-      transaction_id: merchantRef,
-      amount,
-      currency,
-      description: `Subscription payment (${durationMonths} month${durationMonths > 1 ? 's' : ''})`,
-    });
-  }
-
-  // Send push notification
   try {
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', userId);
     const expoTokens = (tokens || []).map((t: any) => t.token);
@@ -78,7 +31,6 @@ async function activateSubscription(userId: string, merchantRef: string, amount:
     }
   } catch {}
 
-  // Send success email
   try {
     const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
     if (profile?.email) {
@@ -86,6 +38,24 @@ async function activateSubscription(userId: string, merchantRef: string, amount:
     }
   } catch (e) {
     console.warn('[confirm][email][warn]', (e as any)?.message);
+  }
+}
+
+async function recordBillingHistory(userId: string, merchantRef: string, amount: number, currency: string, durationMonths: number) {
+  if (!supabaseAdmin) return;
+  const { data: existingBilling } = await supabaseAdmin
+    .from('billing_history')
+    .select('id')
+    .eq('transaction_id', merchantRef)
+    .limit(1);
+  if (!existingBilling || existingBilling.length === 0) {
+    await supabaseAdmin.from('billing_history').insert({
+      user_id: userId,
+      transaction_id: merchantRef,
+      amount,
+      currency,
+      description: `Subscription payment (${durationMonths} month${durationMonths > 1 ? 's' : ''})`,
+    });
   }
 }
 
@@ -169,7 +139,9 @@ async function processPayment(
 
     // Activate subscription (+1 month default; could be improved with plan duration)
     if (payment.user_id) {
-      await activateSubscription(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF', 1);
+      await activateOrExtendSubscription(payment.user_id, payment.amount || 0, 1);
+      await recordBillingHistory(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF', 1);
+      await sendNotifications(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF');
     }
 
     await logEvent('confirm_success', { orderTrackingId, merchantRef, userId: payment.user_id });

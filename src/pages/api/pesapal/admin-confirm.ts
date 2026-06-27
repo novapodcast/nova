@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPaymentSuccessEmail } from '../../../lib/notify';
+import { activateOrExtendSubscription } from '../../../lib/subscriptions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -28,38 +29,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Payment not found', detail: pErr?.message });
     }
 
-    // 2. Activate subscription — deduplicate first
+    // 2. Activate subscription with plan_id
     const months = durationMonths || 1;
-    const { data: existingSubs } = await supabaseAdmin
-      .from('user_subscriptions')
-      .select('id, expires_at, updated_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
-
-    // Delete duplicates if more than 1 row
-    if (existingSubs && existingSubs.length > 1) {
-      const idsToDelete = existingSubs.slice(1).map((s: any) => s.id);
-      await supabaseAdmin.from('user_subscriptions').delete().in('id', idsToDelete);
-    }
-
-    const current = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
-    const base = current?.expires_at ? new Date(current.expires_at) : new Date();
-    const next = new Date(base.getTime());
-    next.setMonth(next.getMonth() + months);
-
-    if (current) {
-      // Update existing row
-      const { error: sErr } = await supabaseAdmin
-        .from('user_subscriptions')
-        .update({ status: 'active', expires_at: next.toISOString() })
-        .eq('id', current.id);
-      if (sErr) console.warn('[admin-confirm][subscription][warn]', sErr.message);
-    } else {
-      // Insert new row
-      const { error: sErr } = await supabaseAdmin
-        .from('user_subscriptions')
-        .insert({ user_id: userId, status: 'active', expires_at: next.toISOString() });
-      if (sErr) console.warn('[admin-confirm][subscription][warn]', sErr.message);
+    const subscription = await activateOrExtendSubscription(userId, amount || payment.amount || 0, months);
+    if (!subscription) {
+      console.warn('[admin-confirm][subscription] failed to activate/extend');
     }
 
     // 3. Billing history (idempotent)
@@ -123,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ok: true,
       status: 'succeeded',
       paymentId: payment.id,
-      subscription: { status: 'active', expires_at: next.toISOString() },
+      subscription: subscription || { status: 'active', expires_at: null },
     });
   } catch (e: any) {
     console.error('[admin-confirm] error', e);

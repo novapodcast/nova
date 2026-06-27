@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
 import { sendPush, sendPaymentSuccessEmail, sendPaymentFailedEmail } from '../../../lib/notify';
+import { activateOrExtendSubscription } from '../../../lib/subscriptions';
 
 async function logEvent(type: string, payload: any) {
   if (!supabaseAdmin) return;
@@ -82,35 +83,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const userId = existing.user_id;
         if (userId) {
-          // Deduplicate subscription rows
-          const { data: existingSubs } = await supabaseAdmin
-            .from('user_subscriptions')
-            .select('id, expires_at, updated_at')
-            .eq('user_id', userId)
-            .order('updated_at', { ascending: false });
-
-          if (existingSubs && existingSubs.length > 1) {
-            const idsToDelete = existingSubs.slice(1).map((s: any) => s.id);
-            await supabaseAdmin.from('user_subscriptions').delete().in('id', idsToDelete);
-          }
-
-          const currentSub = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
-          const base = currentSub?.expires_at ? new Date(currentSub.expires_at) : new Date();
-          const next = new Date(base.getTime());
-          next.setMonth(next.getMonth() + 1);
-
-          if (currentSub) {
-            const { error: sErr } = await supabaseAdmin
-              .from('user_subscriptions')
-              .update({ status: 'active', expires_at: next.toISOString() })
-              .eq('id', currentSub.id);
-            if (sErr) console.warn('[subscriptions][update][warn]', sErr.message);
-          } else {
-            const { error: sErr } = await supabaseAdmin
-              .from('user_subscriptions')
-              .insert({ user_id: userId, status: 'active', expires_at: next.toISOString() });
-            if (sErr) console.warn('[subscriptions][insert][warn]', sErr.message);
-          }
+          // Activate subscription with plan_id
+          await activateOrExtendSubscription(userId, existing.amount || 0, 1);
 
           // Billing history (idempotent)
           const { data: existingBilling } = await supabaseAdmin.from('billing_history').select('id').eq('transaction_id', merchantRef).limit(1);
