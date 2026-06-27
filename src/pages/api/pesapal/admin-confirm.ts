@@ -28,27 +28,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Payment not found', detail: pErr?.message });
     }
 
-    // 2. Activate subscription
+    // 2. Activate subscription — deduplicate first
     const months = durationMonths || 1;
-    const { data: current } = await supabaseAdmin
+    const { data: existingSubs } = await supabaseAdmin
       .from('user_subscriptions')
-      .select('id, expires_at')
+      .select('id, expires_at, updated_at')
       .eq('user_id', userId)
-      .single();
+      .order('updated_at', { ascending: false });
 
+    // Delete duplicates if more than 1 row
+    if (existingSubs && existingSubs.length > 1) {
+      const idsToDelete = existingSubs.slice(1).map((s: any) => s.id);
+      await supabaseAdmin.from('user_subscriptions').delete().in('id', idsToDelete);
+    }
+
+    const current = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
     const base = current?.expires_at ? new Date(current.expires_at) : new Date();
     const next = new Date(base.getTime());
     next.setMonth(next.getMonth() + months);
 
-    const upsert: any = {
-      user_id: userId,
-      status: 'active',
-      expires_at: next.toISOString(),
-    };
-    if (current?.id) upsert.id = current.id;
-
-    const { error: sErr } = await supabaseAdmin.from('user_subscriptions').upsert(upsert).select().single();
-    if (sErr) console.warn('[admin-confirm][subscription][warn]', sErr.message);
+    if (current) {
+      // Update existing row
+      const { error: sErr } = await supabaseAdmin
+        .from('user_subscriptions')
+        .update({ status: 'active', expires_at: next.toISOString() })
+        .eq('id', current.id);
+      if (sErr) console.warn('[admin-confirm][subscription][warn]', sErr.message);
+    } else {
+      // Insert new row
+      const { error: sErr } = await supabaseAdmin
+        .from('user_subscriptions')
+        .insert({ user_id: userId, status: 'active', expires_at: next.toISOString() });
+      if (sErr) console.warn('[admin-confirm][subscription][warn]', sErr.message);
+    }
 
     // 3. Billing history (idempotent)
     const { data: existingBilling } = await supabaseAdmin

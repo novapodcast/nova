@@ -78,12 +78,14 @@ export default function DashboardPage() {
       }
 
       // Load subscription with plan details from pricing_tiers
-      const { data: subData } = await supabase
+      const { data: subDataArr } = await supabase
         .from('user_subscriptions')
         .select('status, expires_at, current_period_end, plan_id')
         .eq('user_id', sessionData.session.user.id)
-        .single();
-      
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      const subData = (subDataArr && subDataArr.length > 0) ? subDataArr[0] : null;
+
       if (subData) {
         let planName = 'Unknown';
         // Look up plan name from pricing_tiers using plan_id

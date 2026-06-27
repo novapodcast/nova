@@ -36,11 +36,13 @@ export default function BillingPage() {
       }
       setUserId(uid);
 
-      const { data: sub } = await supabase
+      const { data: subArr } = await supabase
         .from('user_subscriptions')
         .select('status, expires_at')
         .eq('user_id', uid)
-        .single();
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      const sub = (subArr && subArr.length > 0) ? subArr[0] : null;
       if (sub) setSubscription(sub as Subscription);
 
       const { data: pays } = await supabase

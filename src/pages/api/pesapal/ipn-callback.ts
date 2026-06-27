@@ -82,22 +82,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const userId = existing.user_id;
         if (userId) {
-          const { data: current } = await supabaseAdmin
+          // Deduplicate subscription rows
+          const { data: existingSubs } = await supabaseAdmin
             .from('user_subscriptions')
-            .select('id, expires_at')
+            .select('id, expires_at, updated_at')
             .eq('user_id', userId)
-            .single();
-          const base = current?.expires_at ? new Date(current.expires_at) : new Date();
+            .order('updated_at', { ascending: false });
+
+          if (existingSubs && existingSubs.length > 1) {
+            const idsToDelete = existingSubs.slice(1).map((s: any) => s.id);
+            await supabaseAdmin.from('user_subscriptions').delete().in('id', idsToDelete);
+          }
+
+          const currentSub = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
+          const base = currentSub?.expires_at ? new Date(currentSub.expires_at) : new Date();
           const next = new Date(base.getTime());
           next.setMonth(next.getMonth() + 1);
-          const upsert = {
-            user_id: userId,
-            status: 'active',
-            expires_at: next.toISOString(),
-          } as any;
-          if (current?.id) upsert.id = current.id;
-          const { error: sErr } = await supabaseAdmin.from('user_subscriptions').upsert(upsert).select().single();
-          if (sErr) console.warn('[subscriptions][upsert][warn]', sErr.message);
+
+          if (currentSub) {
+            const { error: sErr } = await supabaseAdmin
+              .from('user_subscriptions')
+              .update({ status: 'active', expires_at: next.toISOString() })
+              .eq('id', currentSub.id);
+            if (sErr) console.warn('[subscriptions][update][warn]', sErr.message);
+          } else {
+            const { error: sErr } = await supabaseAdmin
+              .from('user_subscriptions')
+              .insert({ user_id: userId, status: 'active', expires_at: next.toISOString() });
+            if (sErr) console.warn('[subscriptions][insert][warn]', sErr.message);
+          }
 
           // Billing history (idempotent)
           const { data: existingBilling } = await supabaseAdmin.from('billing_history').select('id').eq('transaction_id', merchantRef).limit(1);
