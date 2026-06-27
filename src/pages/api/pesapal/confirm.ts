@@ -166,7 +166,7 @@ async function processPayment(
     return res.status(200).json({ ok: true, status: 'succeeded', statusDesc });
   }
 
-  if (statusDesc.includes('FAILED') || statusDesc.includes('INVALID')) {
+  if (statusDesc.includes('FAILED') || (statusDesc.includes('INVALID') && !JSON.stringify(status?.error || '').toLowerCase().includes('pending'))) {
     const { error: pErr } = await supabaseAdmin!
       .from('payments')
       .update({ status: 'failed', gateway_status: status })

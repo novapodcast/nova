@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import AccountSettings from '../../components/AccountSettings';
 
-export default function ProfilePage() {
+export default function AccountSettingsPage() {
   return (
     <Suspense fallback={
       <div className="container py-12 md:py-16">

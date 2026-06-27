@@ -83,6 +83,12 @@ export async function getTransactionStatus(orderTrackingId: string): Promise<{
   paymentStatusDescription: string;
   paymentStatusCode: string;
   merchantReference: string;
+  orderTrackingId: string;
+  confirmationCode: string;
+  createdDate: string;
+  status: string;
+  error: any;
+  raw: any;
 }> {
   if (isDemo) {
     return {
@@ -92,6 +98,12 @@ export async function getTransactionStatus(orderTrackingId: string): Promise<{
       paymentStatusDescription: 'COMPLETED',
       paymentStatusCode: '000',
       merchantReference: `DEMO-MR-${orderTrackingId}`,
+      orderTrackingId,
+      confirmationCode: 'DEMO-CONF',
+      createdDate: new Date().toISOString(),
+      status: '200',
+      error: null,
+      raw: {},
     };
   }
   const token = await getAccessToken();
@@ -99,5 +111,19 @@ export async function getTransactionStatus(orderTrackingId: string): Promise<{
     params: { orderTrackingId },
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
-  return res.data;
+  const d = res.data;
+  return {
+    paymentMethod: d.payment_method ?? d.paymentMethod ?? '',
+    amount: d.amount ?? 0,
+    currency: d.currency ?? '',
+    paymentStatusDescription: d.payment_status_description ?? d.paymentStatusDescription ?? '',
+    paymentStatusCode: d.payment_status_code ?? d.paymentStatusCode ?? '',
+    merchantReference: d.merchant_reference ?? d.merchantReference ?? '',
+    orderTrackingId: d.order_tracking_id ?? d.orderTrackingId ?? orderTrackingId,
+    confirmationCode: d.confirmation_code ?? d.confirmationCode ?? '',
+    createdDate: d.created_date ?? d.createdDate ?? '',
+    status: d.status ?? '',
+    error: d.error ?? null,
+    raw: d,
+  };
 }
