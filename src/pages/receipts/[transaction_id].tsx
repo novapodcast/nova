@@ -18,26 +18,24 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
 export default function ReceiptPage({ payment, user, transaction_id, notConfigured }: any) {
   return (
-    <html>
+    <div style={{ fontFamily: 'sans-serif', padding: 20, background: '#111', color: '#fff', minHeight: '100vh' }}>
       <Head>
         <title>Receipt {transaction_id}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <body style={{ fontFamily: 'sans-serif', padding: 20, background: '#111', color: '#fff' }}>
-        <h1>Receipt</h1>
-        {notConfigured && <p>Admin client not configured.</p>}
-        {!payment && <p>No payment found for: {transaction_id}</p>}
-        {payment && (
-          <div style={{ background: '#1a1a1a', padding: 16, borderRadius: 8 }}>
-            <p><b>Transaction</b>: {payment.transaction_id}</p>
-            <p><b>Status</b>: {payment.status}</p>
-            <p><b>Amount</b>: {payment.amount} {payment.currency}</p>
-            <p><b>User</b>: {user?.full_name || payment.user_id}</p>
-            <p><b>Email</b>: {user?.email || '—'}</p>
-            <p><b>Date</b>: {new Date(payment.created_at || Date.now()).toLocaleString()}</p>
-          </div>
-        )}
-      </body>
-    </html>
+      <h1>Receipt</h1>
+      {notConfigured && <p>Admin client not configured.</p>}
+      {!payment && <p>No payment found for: {transaction_id}</p>}
+      {payment && (
+        <div style={{ background: '#1a1a1a', padding: 16, borderRadius: 8 }}>
+          <p><b>Transaction</b>: {payment.transaction_id}</p>
+          <p><b>Status</b>: {payment.status}</p>
+          <p><b>Amount</b>: {payment.amount} {payment.currency}</p>
+          <p><b>User</b>: {user?.full_name || payment.user_id}</p>
+          <p><b>Email</b>: {user?.email || '—'}</p>
+          <p><b>Date</b>: {new Date(payment.created_at || Date.now()).toLocaleString()}</p>
+        </div>
+      )}
+    </div>
   );
 }
