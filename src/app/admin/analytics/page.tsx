@@ -192,7 +192,7 @@ export default function AdminAnalyticsPage() {
         <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
           <div className="text-sm text-muted mb-1">Total Revenue</div>
           <div className="text-3xl font-bold">{analytics.totalRevenue.toLocaleString()} RWF</div>
-          <div className="text-xs text-muted mt-2">All-time</div>
+          <div className="text-xs text-muted mt-2">{start || end ? 'Selected range' : 'Last 30 days'}</div>
         </div>
       </div>
 

@@ -79,23 +79,30 @@ export async function GET(request: NextRequest) {
 
     const { count: totalUsers } = await clientForRead
       .from('profiles')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', startISO)
+      .lte('created_at', endISO);
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { count: recentSignups } = await clientForRead
       .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .gte('created_at', weekAgo);
+      .gte('created_at', weekAgo)
+      .lte('created_at', endISO);
 
     const { count: activeSubscriptions } = await clientForRead
       .from('user_subscriptions')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .gte('created_at', startISO)
+      .lte('created_at', endISO);
 
     const { data: payments } = await clientForRead
       .from('payments')
-      .select('amount, currency')
-      .eq('status', 'succeeded');
+      .select('amount, currency, status, created_at, user_id')
+      .eq('status', 'succeeded')
+      .gte('created_at', startISO)
+      .lte('created_at', endISO);
     const totalRevenue = payments?.reduce((sum, p) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
 
     const { count: totalEpisodes } = await clientForRead
@@ -106,6 +113,30 @@ export async function GET(request: NextRequest) {
       .from('episodes')
       .select('*', { count: 'exact', head: true })
       .eq('is_premium', true);
+
+    // Revenue by plan: map each payment to the user's subscription plan
+    const payingUserIds = Array.from(new Set(payments?.map((p: any) => p.user_id).filter(Boolean) || []));
+    const { data: subsWithPlan } = await clientForRead
+      .from('user_subscriptions')
+      .select('user_id, plan_id')
+      .in('user_id', payingUserIds.length ? payingUserIds : ['no-users']);
+    const planIds = Array.from(new Set(subsWithPlan?.map((s: any) => s.plan_id).filter(Boolean) || []));
+    const { data: tiers } = await clientForRead
+      .from('pricing_tiers')
+      .select('id, display_name_en, plan_name')
+      .in('id', planIds.length ? planIds : ['no-plans']);
+    const tierNames = new Map((tiers || []).map((t: any) => [t.id, t.display_name_en || t.plan_name || 'Unknown']));
+    const userPlan = new Map((subsWithPlan || []).map((s: any) => [s.user_id, tierNames.get(s.plan_id) || 'Unknown']));
+
+    const revenueByPlan: Record<string, { revenue: number; count: number }> = {};
+    payments?.forEach((p: any) => {
+      const plan = userPlan.get(p.user_id) || 'Unknown';
+      if (!revenueByPlan[plan]) {
+        revenueByPlan[plan] = { revenue: 0, count: 0 };
+      }
+      revenueByPlan[plan].revenue += p.currency === 'RWF' ? p.amount || 0 : 0;
+      revenueByPlan[plan].count++;
+    });
 
     const { data: favoritesData } = await clientForRead
       .from('favorites')
@@ -124,15 +155,6 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
       .map((e) => ({ title: e.title, favorites: e.count }));
-
-    const { data: subscriptions } = await clientForRead
-      .from('user_subscriptions')
-      .select('plan_id, pricing_tiers(display_name_en)');
-
-    const { data: paymentsWithPlan } = await clientForRead
-      .from('payments')
-      .select('amount_rwf, user_subscriptions(pricing_tiers(display_name_en))')
-      .eq('status', 'completed');
 
     // Optional: listens aggregations (if table exists and has data)
     let listensByEpisode: Array<{ episode_id: string; title: string; listens: number }> = [];
@@ -183,16 +205,6 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       // If listens table is not present, skip silently
     }
-
-    const revenueByPlan: Record<string, { revenue: number; count: number }> = {};
-    paymentsWithPlan?.forEach((p: any) => {
-      const plan = p.user_subscriptions?.pricing_tiers?.display_name_en || 'Unknown';
-      if (!revenueByPlan[plan]) {
-        revenueByPlan[plan] = { revenue: 0, count: 0 };
-      }
-      revenueByPlan[plan].revenue += p.amount_rwf || 0;
-      revenueByPlan[plan].count++;
-    });
 
     const revenueByPlanArray = Object.entries(revenueByPlan).map(([plan, data]) => ({
       plan,
