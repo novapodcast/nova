@@ -30,6 +30,7 @@ type SaveBody = {
   cover_image_url?: string | null;
   duration_seconds?: number | null;
   is_premium?: boolean;
+  language?: 'en' | 'rw';
   categories?: string[];
 };
 
@@ -101,23 +102,35 @@ export async function POST(request: NextRequest) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') || null;
 
+    const str = (v: string | null | undefined) => (v && v.trim()) ? v.trim() : null;
+
+    const toNullableIso = (v: unknown) => {
+      if (typeof v !== 'string') return null;
+      const s = v.trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString();
+    };
+
     const writePayload: any = {
-      title_en: body.title_en ?? null,
-      title_rw: body.title_rw ?? null,
-      description_en: body.description_en ?? null,
-      description_rw: body.description_rw ?? null,
+      title_en: str(body.title_en),
+      title_rw: str(body.title_rw),
+      description_en: str(body.description_en),
+      description_rw: str(body.description_rw),
       slug,
       status: body.status || 'draft',
-      scheduled_at: body.scheduled_at ?? null,
-      meta_title_en: body.meta_title_en ?? null,
-      meta_title_rw: body.meta_title_rw ?? null,
-      meta_description_en: body.meta_description_en ?? null,
-      meta_description_rw: body.meta_description_rw ?? null,
-      og_image_url: body.og_image_url ?? null,
-      audio_url: body.audio_url ?? null,
-      cover_image_url: body.cover_image_url ?? null,
+      scheduled_at: toNullableIso(body.scheduled_at),
+      meta_title_en: str(body.meta_title_en),
+      meta_title_rw: str(body.meta_title_rw),
+      meta_description_en: str(body.meta_description_en),
+      meta_description_rw: str(body.meta_description_rw),
+      og_image_url: str(body.og_image_url),
+      audio_url: str(body.audio_url),
+      cover_image_url: str(body.cover_image_url),
       duration_seconds: body.duration_seconds ?? null,
       is_premium: body.is_premium ?? false,
+      language: body.language ?? 'rw',
       categories: body.categories ?? [],
     };
 

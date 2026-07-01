@@ -15,6 +15,7 @@ type Episode = {
   duration_seconds: number | null;
   published_at: string | null;
   is_premium: boolean;
+  language: 'en' | 'rw';
   created_at: string;
 };
 
@@ -51,6 +52,7 @@ export default function AdminContentPage() {
     cover_image_url: '',
     duration_seconds: 0,
     is_premium: false,
+    language: 'rw' as 'en' | 'rw',
     categories: [] as string[],
   });
   const [saving, setSaving] = useState(false);
@@ -110,6 +112,7 @@ export default function AdminContentPage() {
       cover_image_url: ep.cover_image_url || '',
       duration_seconds: ep.duration_seconds || 0,
       is_premium: ep.is_premium,
+      language: (ep as any).language || 'rw',
       categories: (ep as any).categories || [],
     });
     setShowNewForm(false);
@@ -134,6 +137,7 @@ export default function AdminContentPage() {
       cover_image_url: '',
       duration_seconds: 0,
       is_premium: false,
+      language: 'rw',
       categories: [],
     });
     setShowNewForm(true);
@@ -193,6 +197,19 @@ export default function AdminContentPage() {
       const payload = {
         id: editingId,
         ...formData,
+        scheduled_at: (formData.status === 'scheduled' && formData.scheduled_at) ? formData.scheduled_at : null,
+        title_en: formData.title_en || null,
+        title_rw: formData.title_rw || null,
+        description_en: formData.description_en || null,
+        description_rw: formData.description_rw || null,
+        slug: formData.slug || null,
+        meta_title_en: formData.meta_title_en || null,
+        meta_title_rw: formData.meta_title_rw || null,
+        meta_description_en: formData.meta_description_en || null,
+        meta_description_rw: formData.meta_description_rw || null,
+        og_image_url: formData.og_image_url || null,
+        audio_url: formData.audio_url || null,
+        cover_image_url: formData.cover_image_url || null,
       };
 
       const res = await fetch('/api/admin/content/save', {
@@ -330,45 +347,52 @@ export default function AdminContentPage() {
             {editingId ? 'Edit Episode' : 'New Episode'}
           </h2>
           <div className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Title (EN)</label>
-                <input
-                  type="text"
-                  value={formData.title_en}
-                  onChange={(e) => setFormData({ ...formData, title_en: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Title (RW)</label>
-                <input
-                  type="text"
-                  value={formData.title_rw}
-                  onChange={(e) => setFormData({ ...formData, title_rw: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+            <div>
+              <label className="block text-sm font-medium mb-2">Episode Language</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, language: 'en' })}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${formData.language === 'en' ? 'bg-primary text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, language: 'rw' })}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${formData.language === 'rw' ? 'bg-primary text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                >
+                  Kinyarwanda
+                </button>
               </div>
             </div>
-            <div className="grid md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Description (EN)</label>
-                <textarea
-                  value={formData.description_en}
-                  onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Description (RW)</label>
-                <textarea
-                  value={formData.description_rw}
-                  onChange={(e) => setFormData({ ...formData, description_rw: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Title ({formData.language === 'en' ? 'EN' : 'RW'})
+              </label>
+              <input
+                type="text"
+                value={formData.language === 'en' ? formData.title_en : formData.title_rw}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  [formData.language === 'en' ? 'title_en' : 'title_rw']: e.target.value,
+                })}
+                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Description ({formData.language === 'en' ? 'EN' : 'RW'})
+              </label>
+              <textarea
+                value={formData.language === 'en' ? formData.description_en : formData.description_rw}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  [formData.language === 'en' ? 'description_en' : 'description_rw']: e.target.value,
+                })}
+                rows={3}
+                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              />
             </div>
             <div className="grid md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
@@ -385,7 +409,7 @@ export default function AdminContentPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const base = formData.title_en || formData.title_rw;
+                    const base = formData.language === 'en' ? formData.title_en : formData.title_rw;
                     const slug = (base || '')
                       .toLowerCase()
                       .normalize('NFD').replace(/\p{Diacritic}/gu, '')
@@ -426,24 +450,31 @@ export default function AdminContentPage() {
             </div>
             <div className="border-t border-white/10 pt-4">
               <h3 className="text-sm font-semibold mb-3">SEO</h3>
-              <div className="grid md:grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-sm mb-1">Meta Title (EN)</label>
-                  <input value={formData.meta_title_en} onChange={(e)=>setFormData({ ...formData, meta_title_en: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
+                  <label className="block text-sm mb-1">Meta Title ({formData.language === 'en' ? 'EN' : 'RW'})</label>
+                  <input
+                    value={formData.language === 'en' ? formData.meta_title_en : formData.meta_title_rw}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      [formData.language === 'en' ? 'meta_title_en' : 'meta_title_rw']: e.target.value,
+                    })}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm mb-1">Meta Title (RW)</label>
-                  <input value={formData.meta_title_rw} onChange={(e)=>setFormData({ ...formData, meta_title_rw: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
+                  <label className="block text-sm mb-1">Meta Description ({formData.language === 'en' ? 'EN' : 'RW'})</label>
+                  <textarea
+                    value={formData.language === 'en' ? formData.meta_description_en : formData.meta_description_rw}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      [formData.language === 'en' ? 'meta_description_en' : 'meta_description_rw']: e.target.value,
+                    })}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                    rows={2}
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm mb-1">Meta Description (EN)</label>
-                  <textarea value={formData.meta_description_en} onChange={(e)=>setFormData({ ...formData, meta_description_en: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg" rows={2}/>
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">Meta Description (RW)</label>
-                  <textarea value={formData.meta_description_rw} onChange={(e)=>setFormData({ ...formData, meta_description_rw: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg" rows={2}/>
-                </div>
-                <div className="md:col-span-2">
                   <label className="block text-sm mb-1">OG Image URL</label>
                   <input value={formData.og_image_url} onChange={(e)=>setFormData({ ...formData, og_image_url: e.target.value })} className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"/>
                 </div>
@@ -660,8 +691,17 @@ export default function AdminContentPage() {
           <div key={ep.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold mb-1">{ep.title}</h3>
-                <p className="text-sm text-muted mb-2">{ep.description || 'No description'}</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`px-2 py-0.5 text-xs font-bold rounded ${ep.language === 'en' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                    {ep.language === 'en' ? 'EN' : 'RW'}
+                  </span>
+                  <h3 className="text-lg font-semibold">
+                    {(ep as any).title_en || (ep as any).title_rw || ep.title}
+                  </h3>
+                </div>
+                <p className="text-sm text-muted mb-2">
+                  {(ep as any).description_en || (ep as any).description_rw || ep.description || 'No description'}
+                </p>
                 <div className="flex gap-4 text-xs text-muted">
                   <span>{ep.duration_seconds ? `${Math.floor(ep.duration_seconds / 60)}m` : 'No duration'}</span>
                   <span>{ep.is_premium ? '👑 Premium' : 'Free'}</span>
