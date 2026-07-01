@@ -77,6 +77,9 @@ export default function AdminContentPage() {
       .from('episodes')
       .select('*')
       .order('created_at', { ascending: false });
+    if (error) {
+      console.error('fetchEpisodes error:', error);
+    }
     if (!error && data) {
       setEpisodes(data);
     }
