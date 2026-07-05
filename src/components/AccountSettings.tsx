@@ -117,6 +117,34 @@ export default function AccountSettings() {
             planName = (tier as any).display_name_en || (tier as any).plan_name;
           }
         }
+
+        if (!planName) {
+          const { data: latestPayment } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('user_id', uid)
+            .eq('status', 'succeeded')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const latestAmount = latestPayment && latestPayment.length > 0 ? latestPayment[0].amount : null;
+          if (latestAmount != null) {
+            const { data: inferredTier } = await supabase
+              .from('pricing_tiers')
+              .select('display_name_en, plan_name')
+              .eq('price_rwf', latestAmount)
+              .limit(1);
+            const inferred = inferredTier && inferredTier.length > 0 ? inferredTier[0] : null;
+            if (inferred) {
+              planName = inferred.display_name_en || inferred.plan_name;
+            }
+          }
+        }
+
+        if (!planName && subRow.status === 'active') {
+          planName = 'Active subscription';
+        }
+
         setSubscription({
           status: subRow.status,
           expires_at: subRow.expires_at || null,

@@ -57,9 +57,14 @@ export default function PricingPage() {
     loadTiers();
   }, []);
 
-  // Group tiers by plan name (Basic, Pro, Premium)
+  const getPlanFamily = (tier: PricingTier) => {
+    const family = tier.plan_name?.split('_')[0]?.trim();
+    return family || tier.display_name_en || tier.display_name_rw || tier.plan_name;
+  };
+
+  // Group tiers by stable plan family (Basic, Pro, Premium)
   const groupedPlans = tiers.reduce((acc, tier) => {
-    const baseName = tier.display_name_en;
+    const baseName = getPlanFamily(tier);
     if (!acc[baseName]) acc[baseName] = {};
     const key = tier.duration_months === 1 ? '1m' : tier.duration_months === 12 ? '12m' : 'free';
     acc[baseName][key] = tier;
@@ -163,53 +168,59 @@ export default function PricingPage() {
         {/* Paid Plans */}
         {planNames.map((planName) => {
           const planTiers = groupedPlans[planName];
-          const currentTier = planTiers[duration];
+          const preferredTier = planTiers[duration] || planTiers['1m'] || planTiers['12m'] || planTiers.free || Object.values(planTiers)[0];
           const monthlyTier = planTiers['1m'];
+          const annualTier = planTiers['12m'];
 
-          if (!currentTier || !monthlyTier) return null;
+          if (!preferredTier) return null;
 
-          const isAnnual = duration === '12m';
-          const monthlyEffective = isAnnual ? Math.round(currentTier.price_rwf / 12) : monthlyTier.price_rwf;
-          const savingsPercent = isAnnual
-            ? calculateSavingsPercent(monthlyTier.price_rwf, currentTier.price_rwf, currentTier.duration_months)
+          const isAnnual = preferredTier.duration_months === 12;
+          const monthlyEffective = isAnnual ? Math.round(preferredTier.price_rwf / 12) : preferredTier.price_rwf;
+          const savingsPercent = isAnnual && monthlyTier
+            ? calculateSavingsPercent(monthlyTier.price_rwf, preferredTier.price_rwf, preferredTier.duration_months)
             : 0;
 
           const marketingName: Record<string, string> = { Basic: 'Younger', Pro: 'Brave', Premium: 'Genius' };
 
           // Feature list with graceful fallback: if annual tier has empty features, use monthly tier features
           const featuresForLanguage = (tier: PricingTier) => (language === 'rw' ? tier.features_rw : tier.features_en) || [];
-          const currentFeatures = featuresForLanguage(currentTier);
-          const displayFeatures = currentFeatures.length > 0 ? currentFeatures : featuresForLanguage(monthlyTier);
+          const currentFeatures = featuresForLanguage(preferredTier);
+          const fallbackTier = monthlyTier || annualTier || preferredTier;
+          const displayFeatures = currentFeatures.length > 0 ? currentFeatures : featuresForLanguage(fallbackTier);
 
           return (
             <div
               key={planName}
               className={`rounded-2xl p-6 flex flex-col relative ${
-                currentTier.is_highlighted
+                preferredTier.is_highlighted
                   ? 'bg-gradient-to-b from-primary/10 to-[var(--surface)] ring-2 ring-primary md:scale-[1.02]'
                   : 'bg-[var(--surface)] ring-1 ring-white/5'
               }`}
             >
-              {currentTier.is_highlighted && (
+              {preferredTier.is_highlighted && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-black text-xs font-bold rounded-full">
                   ⭐ {t('admin.mostPopular', language)}
                 </div>
               )}
 
-              <h3 className="text-xl font-bold mb-1">{language === 'rw' ? currentTier.display_name_rw : currentTier.display_name_en}</h3>
+              <h3 className="text-xl font-bold mb-1">{language === 'rw' ? preferredTier.display_name_rw : preferredTier.display_name_en}</h3>
               <div className="text-xs text-muted mb-3">The {marketingName[planName] ?? ''} Choice</div>
 
               <div className="mb-4">
-                {isAnnual && (
+                {isAnnual && monthlyTier && (
                   <div className="text-xs line-through text-white/40 mb-1">{formatPrice(monthlyTier.price_rwf)} RWF / mo</div>
                 )}
                 <p className="text-3xl font-bold">{formatPrice(monthlyEffective)} RWF</p>
                 <p className="text-sm text-muted mt-1">
-                  {isAnnual ? t('pricing.billedYearly', language) : t('pricing.perMonth', language)}
+                  {preferredTier.duration_months === 12
+                    ? t('pricing.billedYearly', language)
+                    : preferredTier.duration_months === 1
+                      ? t('pricing.perMonth', language)
+                      : `${preferredTier.duration_months} months`}
                 </p>
                 {isAnnual && (
                   <p className="text-xs font-semibold mt-2 inline-block px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                    {t('pricing.annualDiscount', language)}
+                    {savingsPercent > 0 ? `${savingsPercent}% ${t('pricing.annualDiscount', language)}` : t('pricing.annualDiscount', language)}
                   </p>
                 )}
               </div>
@@ -224,9 +235,9 @@ export default function PricingPage() {
               </ul>
 
               <Link
-                href={isAuthenticated ? `/checkout?plan=${currentTier.id}` : "/signup"}
+                href={isAuthenticated ? `/checkout?plan=${preferredTier.id}` : "/signup"}
                 className={`w-full px-4 py-2.5 rounded-lg font-semibold transition text-center block ${
-                  currentTier.is_highlighted
+                  preferredTier.is_highlighted
                     ? 'bg-primary text-black hover:opacity-90'
                     : 'bg-white/5 text-white hover:bg-white/10'
                 }`}

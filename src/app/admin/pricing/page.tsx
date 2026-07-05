@@ -32,6 +32,14 @@ export default function AdminPricingPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [allowlistOnly, setAllowlistOnly] = useState(false);
 
+  const invalidatePricingCaches = (tierId?: string) => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.removeItem('pricing_tiers_v1');
+    if (tierId) {
+      window.sessionStorage.removeItem(`dash_tier_${tierId}`);
+    }
+  };
+
   useEffect(() => {
     if (authorized) {
       setLoading(false);
@@ -89,6 +97,7 @@ export default function AdminPricingPage() {
         throw new Error(body?.error || `Request failed (${res.status})`);
       }
 
+      invalidatePricingCaches(editingId);
       setMessage({ type: 'success', text: 'Pricing tier updated successfully!' });
       setEditingId(null);
       setEditForm({});
@@ -108,6 +117,7 @@ export default function AdminPricingPage() {
       .eq('id', tier.id);
 
     if (!error) {
+      invalidatePricingCaches(tier.id);
       loadTiers();
       setMessage({ type: 'success', text: `${tier.plan_name} ${!tier.is_active ? 'activated' : 'deactivated'}` });
     } else {

@@ -105,6 +105,37 @@ export default function DashboardPage() {
             planName = tierData.display_name_en || tierData.plan_name || 'Unknown';
           }
         }
+
+        // Fallback: infer plan from latest successful payment amount when plan_id is missing
+        // or the tier lookup fails. This prevents a valid subscription from showing as Unknown.
+        if (planName === 'Unknown') {
+          const { data: paymentRows } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('user_id', sessionData.session.user.id)
+            .eq('status', 'succeeded')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const latestAmount = paymentRows && paymentRows.length > 0 ? paymentRows[0].amount : null;
+          if (latestAmount != null) {
+            const { data: inferredTier } = await supabase
+              .from('pricing_tiers')
+              .select('display_name_en, plan_name')
+              .eq('price_rwf', latestAmount)
+              .limit(1);
+
+            const inferred = inferredTier && inferredTier.length > 0 ? inferredTier[0] : null;
+            if (inferred) {
+              planName = inferred.display_name_en || inferred.plan_name || 'Unknown';
+            }
+          }
+        }
+
+        if (planName === 'Unknown' && subData.status === 'active') {
+          planName = 'Active subscription';
+        }
+
         setSubscription({
           plan_name: planName,
           status: subData.status,
