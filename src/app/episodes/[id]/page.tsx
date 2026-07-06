@@ -109,6 +109,15 @@ function processQueueFlush(sendFn: (item: ListenQueueItem) => Promise<boolean>):
 
 interface Props { params: { id: string } }
 
+interface EpisodeContent {
+  id: string;
+  audio_url: string;
+  duration_seconds: number;
+  language: 'en' | 'rw';
+  label: string | null;
+  sort_order: number;
+}
+
 interface Episode {
   id: string;
   title_en: string | null;
@@ -125,8 +134,7 @@ interface Episode {
     title_en: string | null;
     title_rw: string | null;
   };
-
-
+  episode_contents?: EpisodeContent[];
 }
 
 export default function EpisodeDetailPage({ params }: Props) {
@@ -136,6 +144,7 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [error, setError] = useState(false);
   const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
   const [fav, setFav] = useState<boolean>(false);
+  const [selectedTrack, setSelectedTrack] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
@@ -166,7 +175,8 @@ export default function EpisodeDetailPage({ params }: Props) {
           published_at,
           podcast_id,
           categories,
-          podcasts!inner(title_en, title_rw)
+          podcasts!inner(title_en, title_rw),
+          episode_contents(id, audio_url, duration_seconds, language, label, sort_order)
         `)
         .eq('id', params.id)
         .eq('is_active', true)
@@ -179,11 +189,23 @@ export default function EpisodeDetailPage({ params }: Props) {
       }
 
       const rawData = data as any;
+      const contents: EpisodeContent[] = (rawData.episode_contents || [])
+        .map((c: any) => ({
+          id: c.id,
+          audio_url: c.audio_url,
+          duration_seconds: c.duration_seconds ?? 0,
+          language: (c.language === 'en' ? 'en' : 'rw') as 'en' | 'rw',
+          label: c.label,
+          sort_order: c.sort_order ?? 0,
+        }))
+        .sort((a: EpisodeContent, b: EpisodeContent) => a.sort_order - b.sort_order);
       const ep: Episode = {
         ...rawData,
+        episode_contents: contents,
         podcasts: Array.isArray(rawData.podcasts) && rawData.podcasts.length > 0 ? rawData.podcasts[0] : rawData.podcasts,
       };
       setEpisode(ep);
+      setSelectedTrack(0);
       setCache(cacheKey, ep, 5 * 60 * 1000);
       setLoading(false);
 
@@ -251,6 +273,11 @@ export default function EpisodeDetailPage({ params }: Props) {
       </div>
     );
   }
+
+  const tracks = episode.episode_contents && episode.episode_contents.length > 0
+    ? episode.episode_contents
+    : (episode.audio_url ? [{ id: 'legacy', audio_url: episode.audio_url, duration_seconds: episode.duration_seconds ?? 0, language: 'rw' as 'en' | 'rw', label: 'Primary', sort_order: 0 }] : []);
+  const currentTrack = tracks[selectedTrack] || tracks[0];
 
   const title = (language === 'rw' ? episode.title_rw : episode.title_en) || episode.title_en || episode.title_rw || t('episodes.untitled', language);
   const description = (language === 'rw' ? episode.description_rw : episode.description_en) || episode.description_en || episode.description_rw || '';
@@ -326,7 +353,7 @@ export default function EpisodeDetailPage({ params }: Props) {
       session_id: sessionIdRef.current || generateUUID(),
       duration_seconds: Math.max(0, Math.round(payload.duration_seconds || 0)),
       completed: !!payload.completed,
-      language,
+      language: currentTrack?.language || language,
     };
     if (!sessionIdRef.current) {
       sessionIdRef.current = item.session_id;
@@ -441,7 +468,7 @@ export default function EpisodeDetailPage({ params }: Props) {
             <h1 className="text-3xl md:text-4xl font-bold mb-3">{title}</h1>
             
             <div className="flex items-center gap-4 text-sm text-muted mb-6">
-              {episode.duration_seconds && <span>{formatDuration(episode.duration_seconds)}</span>}
+              {currentTrack?.duration_seconds ? <span>{formatDuration(currentTrack.duration_seconds)}</span> : (episode.duration_seconds && <span>{formatDuration(episode.duration_seconds)}</span>)}
               {episode.published_at && <span>•</span>}
               {episode.published_at && <span>{new Date(episode.published_at).toLocaleDateString()}</span>}
             </div>
@@ -464,12 +491,35 @@ export default function EpisodeDetailPage({ params }: Props) {
               </button>
             </div>
 
-            {episode.audio_url && (
+            {tracks.length > 1 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Audio Track</label>
+                <div className="flex flex-wrap gap-2">
+                  {tracks.map((track, idx) => (
+                    <button
+                      key={track.id}
+                      onClick={() => {
+                        setSelectedTrack(idx);
+                        isPlayingRef.current = false;
+                        accRef.current = 0;
+                      }}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${selectedTrack === idx ? 'bg-primary text-black' : 'bg-white/5 text-white hover:bg-white/10'}`}
+                    >
+                      {track.label || (track.language === 'en' ? 'English' : 'Kinyarwanda')}
+                      <span className={'ml-1 text-xs opacity-60'}>{track.language === 'en' ? 'EN' : 'RW'}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {currentTrack && currentTrack.audio_url && (
               <audio
+                key={currentTrack.id}
                 ref={audioRef}
-                src={episode.audio_url}
+                src={currentTrack.audio_url}
                 controls
-                className="w-full mt-4"
+                className={'w-full mt-4'}
                 onPlay={handleAudioPlay}
                 onPause={handleAudioPause}
                 onEnded={handleAudioEnded}

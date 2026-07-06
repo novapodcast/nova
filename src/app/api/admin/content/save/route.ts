@@ -12,6 +12,15 @@ function isAdminEmailServer(email: string | null | undefined): boolean {
   return list.includes(email.toLowerCase());
 }
 
+type AudioFile = {
+  id?: string;
+  audio_url: string;
+  duration_seconds: number;
+  language: 'en' | 'rw';
+  label: string;
+  sort_order: number;
+};
+
 type SaveBody = {
   id?: string | null;
   title_en?: string;
@@ -32,6 +41,7 @@ type SaveBody = {
   is_premium?: boolean;
   language?: 'en' | 'rw';
   categories?: string[];
+  audio_files?: AudioFile[];
 };
 
 export async function POST(request: NextRequest) {
@@ -113,6 +123,9 @@ export async function POST(request: NextRequest) {
       return d.toISOString();
     };
 
+    const audioFiles = (body.audio_files || []).filter((af) => af.audio_url && af.audio_url.trim());
+    const primaryAudio = audioFiles.length > 0 ? audioFiles[0] : null;
+
     const writePayload: any = {
       title_en: str(body.title_en),
       title_rw: str(body.title_rw),
@@ -126,13 +139,15 @@ export async function POST(request: NextRequest) {
       meta_description_en: str(body.meta_description_en),
       meta_description_rw: str(body.meta_description_rw),
       og_image_url: str(body.og_image_url),
-      audio_url: str(body.audio_url),
+      audio_url: primaryAudio ? primaryAudio.audio_url : str(body.audio_url),
       cover_image_url: str(body.cover_image_url),
-      duration_seconds: body.duration_seconds ?? null,
+      duration_seconds: primaryAudio ? primaryAudio.duration_seconds : (body.duration_seconds ?? null),
       is_premium: body.is_premium ?? false,
       language: body.language ?? 'rw',
       categories: body.categories ?? [],
     };
+
+    let episodeId: string | null = null;
 
     if (body.id) {
       const { error: updateErr } = await clientForWrite
@@ -143,13 +158,43 @@ export async function POST(request: NextRequest) {
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 400 });
       }
+      episodeId = body.id;
     } else {
-      const { error: insertErr } = await clientForWrite
+      const { data: inserted, error: insertErr } = await clientForWrite
         .from('episodes')
-        .insert(writePayload);
+        .insert(writePayload)
+        .select('id')
+        .single();
 
       if (insertErr) {
         return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+      episodeId = inserted?.id ?? null;
+    }
+
+    // Sync episode_contents (audio tracks)
+    if (episodeId && audioFiles.length > 0) {
+      // Delete existing contents and re-insert (simple sync strategy)
+      await clientForWrite
+        .from('episode_contents')
+        .delete()
+        .eq('episode_id', episodeId);
+
+      const contentsRows = audioFiles.map((af, index) => ({
+        episode_id: episodeId,
+        audio_url: af.audio_url,
+        duration_seconds: af.duration_seconds ?? 0,
+        language: af.language || 'rw',
+        label: af.label || null,
+        sort_order: typeof af.sort_order === 'number' ? af.sort_order : index,
+      }));
+
+      const { error: contentsErr } = await clientForWrite
+        .from('episode_contents')
+        .insert(contentsRows);
+
+      if (contentsErr) {
+        console.error('episode_contents sync error:', contentsErr);
       }
     }
 

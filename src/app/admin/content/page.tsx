@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAdminGuard } from '@/lib/useAdminGuard';
-import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration, formatFileSize } from '@/lib/upload';
+import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/i18n';
 
@@ -17,6 +17,7 @@ type Episode = {
   is_premium: boolean;
   language: 'en' | 'rw';
   created_at: string;
+  episode_contents?: EpisodeAudio[];
 };
 
 type Category = {
@@ -26,6 +27,48 @@ type Category = {
   name_rw: string;
   color: string;
   sort_order: number;
+};
+
+type EpisodeAudio = {
+  id?: string;
+  audio_url: string;
+  duration_seconds: number;
+  language: 'en' | 'rw';
+  label: string;
+  sort_order: number;
+};
+
+const createEmptyAudioEntry = (): EpisodeAudio => ({
+  audio_url: '',
+  duration_seconds: 0,
+  language: 'rw',
+  label: '',
+  sort_order: 0,
+});
+
+const buildEpisodeAudioFiles = (items: any[] | undefined, fallback?: Episode): EpisodeAudio[] => {
+  const mapped = (items || [])
+    .map((item, index) => ({
+      id: item.id,
+      audio_url: item.audio_url || '',
+      duration_seconds: item.duration_seconds ?? 0,
+      language: (item.language === 'en' ? 'en' : 'rw') as 'en' | 'rw',
+      label: item.label || '',
+      sort_order: typeof item.sort_order === 'number' ? item.sort_order : index,
+    }))
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  if (mapped.length > 0) return mapped;
+  if (fallback?.audio_url) {
+    return [{
+      audio_url: fallback.audio_url,
+      duration_seconds: fallback.duration_seconds ?? 0,
+      language: fallback.language,
+      label: 'Primary',
+      sort_order: 0,
+    }];
+  }
+  return [createEmptyAudioEntry()];
 };
 
 export default function AdminContentPage() {
@@ -48,18 +91,16 @@ export default function AdminContentPage() {
     meta_description_en: '',
     meta_description_rw: '',
     og_image_url: '',
-    audio_url: '',
     cover_image_url: '',
-    duration_seconds: 0,
     is_premium: false,
     language: 'rw' as 'en' | 'rw',
     categories: [] as string[],
   });
+  const [audioFiles, setAudioFiles] = useState<EpisodeAudio[]>([createEmptyAudioEntry()]);
   const [saving, setSaving] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingAudio, setUploadingAudio] = useState(false);
-  const [useAudioUrl, setUseAudioUrl] = useState(false);
+  const [uploadingAudioIndex, setUploadingAudioIndex] = useState<number | null>(null);
   const [useCoverUrl, setUseCoverUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [customCategoryInput, setCustomCategoryInput] = useState('');
@@ -75,13 +116,17 @@ export default function AdminContentPage() {
   async function fetchEpisodes() {
     const { data, error } = await supabase
       .from('episodes')
-      .select('*')
+      .select('*, episode_contents(*)')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('fetchEpisodes error:', error);
     }
     if (!error && data) {
-      setEpisodes(data);
+      const normalized = (data as Episode[]).map((row) => ({
+        ...row,
+        episode_contents: buildEpisodeAudioFiles((row as any).episode_contents, row),
+      }));
+      setEpisodes(normalized);
     }
   }
 
@@ -111,13 +156,12 @@ export default function AdminContentPage() {
       meta_description_en: (ep as any).meta_description_en || '',
       meta_description_rw: (ep as any).meta_description_rw || '',
       og_image_url: (ep as any).og_image_url || '',
-      audio_url: ep.audio_url || '',
       cover_image_url: ep.cover_image_url || '',
-      duration_seconds: ep.duration_seconds || 0,
       is_premium: ep.is_premium,
       language: (ep as any).language || 'rw',
       categories: (ep as any).categories || [],
     });
+    setAudioFiles(buildEpisodeAudioFiles((ep as any).episode_contents, ep));
     setShowNewForm(false);
   }
 
@@ -136,13 +180,12 @@ export default function AdminContentPage() {
       meta_description_en: '',
       meta_description_rw: '',
       og_image_url: '',
-      audio_url: '',
       cover_image_url: '',
-      duration_seconds: 0,
       is_premium: false,
       language: 'rw',
       categories: [],
     });
+    setAudioFiles([createEmptyAudioEntry()]);
     setShowNewForm(true);
   }
 
@@ -166,7 +209,7 @@ export default function AdminContentPage() {
     }
   }
 
-  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>, index: number) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -175,16 +218,33 @@ export default function AdminContentPage() {
       return;
     }
 
-    setUploadingAudio(true);
+    setUploadingAudioIndex(index);
     try {
       const duration = await getAudioDuration(file);
       const { url } = await uploadEpisodeAudio(file);
-      setFormData({ ...formData, audio_url: url, duration_seconds: duration });
+      setAudioFiles((prev) => prev.map((af, i) =>
+        i === index ? { ...af, audio_url: url, duration_seconds: duration } : af
+      ));
     } catch (error: any) {
       alert(error.message || 'Upload failed');
     } finally {
-      setUploadingAudio(false);
+      setUploadingAudioIndex(null);
     }
+  }
+
+  function addAudioFile() {
+    setAudioFiles((prev) => [...prev, { ...createEmptyAudioEntry(), sort_order: prev.length }]);
+  }
+
+  function removeAudioFile(index: number) {
+    setAudioFiles((prev) => prev.length > 1
+      ? prev.filter((_, i) => i !== index).map((af, i) => ({ ...af, sort_order: i }))
+      : prev
+    );
+  }
+
+  function updateAudioFile(index: number, patch: Partial<EpisodeAudio>) {
+    setAudioFiles((prev) => prev.map((af, i) => (i === index ? { ...af, ...patch } : af)));
   }
 
   async function handleSave() {
@@ -211,8 +271,8 @@ export default function AdminContentPage() {
         meta_description_en: formData.meta_description_en || null,
         meta_description_rw: formData.meta_description_rw || null,
         og_image_url: formData.og_image_url || null,
-        audio_url: formData.audio_url || null,
         cover_image_url: formData.cover_image_url || null,
+        audio_files: audioFiles.filter((af) => af.audio_url.trim() !== ''),
       };
 
       const res = await fetch('/api/admin/content/save', {
@@ -582,38 +642,84 @@ export default function AdminContentPage() {
                 <p className="text-xs text-muted mt-1">💡 Tip: Use predefined categories for consistency, or add custom ones as needed.</p>
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium">Audio File</label>
+            <div className="border-t border-white/10 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">Audio Tracks</h3>
                 <button
                   type="button"
-                  onClick={() => setUseAudioUrl(!useAudioUrl)}
-                  className="text-xs text-primary hover:underline"
+                  onClick={addAudioFile}
+                  className="text-xs px-3 py-1.5 bg-primary/20 border border-primary/40 text-primary rounded-lg hover:bg-primary/30 transition font-semibold"
                 >
-                  {useAudioUrl ? '📁 Upload File' : '🔗 Use URL'}
+                  + Add Track
                 </button>
               </div>
-              {useAudioUrl ? (
-                <input
-                  type="text"
-                  value={formData.audio_url}
-                  onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
-                  placeholder="https://example.com/audio.mp3"
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              ) : (
-                <div>
-                  <input
-                    type="file"
-                    accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
-                    onChange={handleAudioUpload}
-                    disabled={uploadingAudio}
-                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
-                  />
-                  {uploadingAudio && <p className="text-xs text-primary mt-1">Uploading audio...</p>}
-                  <p className="text-xs text-muted mt-1">Max 500MB. MP3, WAV, OGG, AAC, M4A. Duration auto-detected.</p>
-                </div>
-              )}
+              <div className="space-y-3">
+                {audioFiles.map((af, index) => (
+                  <div key={index} className="p-3 bg-black/20 rounded-lg border border-white/10 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={af.label}
+                        onChange={(e) => updateAudioFile(index, { label: e.target.value })}
+                        placeholder="Label (e.g. Primary, English, Kinyarwanda)"
+                        className="flex-1 px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <select
+                        value={af.language}
+                        onChange={(e) => updateAudioFile(index, { language: e.target.value as 'en' | 'rw' })}
+                        className="px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm"
+                      >
+                        <option value="rw">Kinyarwanda</option>
+                        <option value="en">English</option>
+                      </select>
+                      {audioFiles.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeAudioFile(index)}
+                          className="px-2 py-1.5 text-xs bg-red-600/20 border border-red-600/40 text-red-400 rounded hover:bg-red-600/30 transition"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={af.audio_url}
+                        onChange={(e) => updateAudioFile(index, { audio_url: e.target.value })}
+                        placeholder="https://example.com/audio.mp3"
+                        className="flex-1 px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <label
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer border border-white/10 hover:bg-white/10 transition ${uploadingAudioIndex === index ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
+                        {uploadingAudioIndex === index ? 'Uploading…' : '📁 Upload'}
+                        <input
+                          type="file"
+                          accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
+                          onChange={(e) => handleAudioUpload(e, index)}
+                          disabled={uploadingAudioIndex === index}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted">
+                      <span>Duration:</span>
+                      <input
+                        type="number"
+                        value={af.duration_seconds}
+                        onChange={(e) => updateAudioFile(index, { duration_seconds: parseInt(e.target.value) || 0 })}
+                        className="w-24 px-2 py-1 bg-black/20 border border-white/10 rounded text-sm"
+                      />
+                      <span>seconds</span>
+                      {af.audio_url && (
+                        <span className="ml-auto text-green-400">✓ Audio set</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-2">Add multiple audio tracks for different languages or segments. Each track has its own URL, duration, and language. Max 500MB per file.</p>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -650,15 +756,6 @@ export default function AdminContentPage() {
                   <p className="text-xs text-muted mt-1">Max 10MB. JPG, PNG, WebP.</p>
                 </div>
               )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Duration (seconds)</label>
-              <input
-                type="number"
-                value={formData.duration_seconds}
-                onChange={(e) => setFormData({ ...formData, duration_seconds: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              />
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -706,7 +803,7 @@ export default function AdminContentPage() {
                   {(ep as any).description_en || (ep as any).description_rw || ep.description || 'No description'}
                 </p>
                 <div className="flex gap-4 text-xs text-muted">
-                  <span>{ep.duration_seconds ? `${Math.floor(ep.duration_seconds / 60)}m` : 'No duration'}</span>
+                  <span>{ep.episode_contents && ep.episode_contents.length > 0 ? `${ep.episode_contents.length} track${ep.episode_contents.length > 1 ? 's' : ''}` : 'No audio'}</span>
                   <span>{ep.is_premium ? '👑 Premium' : 'Free'}</span>
                   <span>{ep.published_at ? `Published ${new Date(ep.published_at).toLocaleDateString()}` : 'Draft'}</span>
                 </div>

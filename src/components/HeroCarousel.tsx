@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import AudioWaveform from './AudioWaveform';
 
 export interface CarouselSlide {
@@ -122,15 +123,21 @@ export default function HeroCarousel({ language = 'en', slides }: { language?: s
 
             {/* Actions */}
             <div className="flex gap-3 flex-wrap">
-              <button className="px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:opacity-90 transition flex items-center gap-2">
+              <Link
+                href={currentSlide.cta_url || '/episodes'}
+                className="px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:opacity-90 transition flex items-center gap-2"
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 5v14l11-7z" />
                 </svg>
                 {language === 'rw' ? (currentSlide.cta_label_rw || 'Tangira Kumva') : (currentSlide.cta_label_en || 'Play Now')}
-              </button>
-              <button className="px-5 py-2.5 rounded-lg border border-white/20 text-white font-semibold text-sm hover:bg-white/5 transition">
+              </Link>
+              <Link
+                href="/pricing"
+                className="px-5 py-2.5 rounded-lg border border-white/20 text-white font-semibold text-sm hover:bg-white/5 transition"
+              >
                 {language === 'rw' ? 'Reba Byinshi' : 'View Plans'}
-              </button>
+              </Link>
             </div>
           </div>
 

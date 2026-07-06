@@ -79,9 +79,7 @@ export async function GET(request: NextRequest) {
 
     const { count: totalUsers } = await clientForRead
       .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startISO)
-      .lte('created_at', endISO);
+      .select('*', { count: 'exact', head: true });
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { count: recentSignups } = await clientForRead
