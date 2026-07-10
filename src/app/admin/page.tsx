@@ -66,6 +66,12 @@ export default function AdminPage() {
           <p className="text-sm text-muted">{t('admin.viewMetrics', language)}</p>
         </Link>
         
+        <Link href="/admin/podcasts" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
+          <div className="text-sm text-muted mb-2">Podcasts</div>
+          <div className="text-xl font-semibold mb-2">Manage Podcasts</div>
+          <p className="text-sm text-muted">Create shows, set speakers and categories</p>
+        </Link>
+
         <Link href="/admin/content" className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 hover:ring-primary/50 transition">
           <div className="text-sm text-muted mb-2">{t('admin.content', language)}</div>
           <div className="text-xl font-semibold mb-2">Content Management</div>

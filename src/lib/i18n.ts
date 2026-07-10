@@ -7,6 +7,7 @@ export const translations = {
     nav: {
       home: 'Ahabanza',
       episodes: 'Ibice',
+      podcasts: 'Podikasti',
       pricing: 'Ibiciro',
       about: 'Abo turi bo',
       contact: 'Twandikire',
@@ -24,6 +25,7 @@ export const translations = {
       browsePlans: 'Reba Gahunda',
       episodesAvailable: 'Ibice 150K+ Biraboneka',
       featuredEpisodes: 'Ibiganiro byihariye',
+      featuredPodcasts: 'Podikasti zigaragara',
       viewAll: 'Reba byose',
     },
     
@@ -245,6 +247,7 @@ export const translations = {
     nav: {
       home: 'Home',
       episodes: 'Episodes',
+      podcasts: 'Podcasts',
       pricing: 'Pricing',
       about: 'About',
       contact: 'Contact',
@@ -262,6 +265,7 @@ export const translations = {
       browsePlans: 'Browse Plans',
       episodesAvailable: '150K+ Episodes Available',
       featuredEpisodes: 'Featured Episodes',
+      featuredPodcasts: 'Featured Podcasts',
       viewAll: 'View all',
     },
     

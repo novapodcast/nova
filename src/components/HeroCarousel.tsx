@@ -124,7 +124,7 @@ export default function HeroCarousel({ language = 'en', slides }: { language?: s
             {/* Actions */}
             <div className="flex gap-3 flex-wrap">
               <Link
-                href={currentSlide.cta_url || '/episodes'}
+                href={currentSlide.cta_url || '/podcasts'}
                 className="px-5 py-2.5 rounded-lg bg-primary text-black font-semibold text-sm hover:opacity-90 transition flex items-center gap-2"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">

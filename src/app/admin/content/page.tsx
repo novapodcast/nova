@@ -1,23 +1,42 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { useAdminGuard } from '@/lib/useAdminGuard';
 import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/i18n';
 
+type Podcast = {
+  id: string;
+  title_en: string;
+  title_rw: string;
+  description_en: string | null;
+  description_rw: string | null;
+  cover_image_url: string;
+  speaker_name: string;
+  is_active: boolean;
+  total_episodes: number;
+  total_listeners: number;
+};
+
 type Episode = {
   id: string;
-  title: string;
-  description: string | null;
+  title_en: string | null;
+  title_rw: string | null;
+  description_en: string | null;
+  description_rw: string | null;
   audio_url: string | null;
   cover_image_url: string | null;
   duration_seconds: number | null;
   published_at: string | null;
   is_premium: boolean;
   language: 'en' | 'rw';
+  podcast_id: string | null;
+  status: string;
   created_at: string;
-  episode_contents?: EpisodeAudio[];
+  categories: string[];
 };
 
 type Category = {
@@ -29,52 +48,13 @@ type Category = {
   sort_order: number;
 };
 
-type EpisodeAudio = {
-  id?: string;
-  audio_url: string;
-  duration_seconds: number;
-  language: 'en' | 'rw';
-  label: string;
-  sort_order: number;
-};
-
-const createEmptyAudioEntry = (): EpisodeAudio => ({
-  audio_url: '',
-  duration_seconds: 0,
-  language: 'rw',
-  label: '',
-  sort_order: 0,
-});
-
-const buildEpisodeAudioFiles = (items: any[] | undefined, fallback?: Episode): EpisodeAudio[] => {
-  const mapped = (items || [])
-    .map((item, index) => ({
-      id: item.id,
-      audio_url: item.audio_url || '',
-      duration_seconds: item.duration_seconds ?? 0,
-      language: (item.language === 'en' ? 'en' : 'rw') as 'en' | 'rw',
-      label: item.label || '',
-      sort_order: typeof item.sort_order === 'number' ? item.sort_order : index,
-    }))
-    .sort((a, b) => a.sort_order - b.sort_order);
-
-  if (mapped.length > 0) return mapped;
-  if (fallback?.audio_url) {
-    return [{
-      audio_url: fallback.audio_url,
-      duration_seconds: fallback.duration_seconds ?? 0,
-      language: fallback.language,
-      label: 'Primary',
-      sort_order: 0,
-    }];
-  }
-  return [createEmptyAudioEntry()];
-};
-
 export default function AdminContentPage() {
   const { language } = useLanguage();
   const { loading: guardLoading, authorized } = useAdminGuard();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
+  const [podcasts, setPodcasts] = useState<Podcast[]>([]);
+  const [selectedPodcastId, setSelectedPodcastId] = useState<string | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [predefinedCategories, setPredefinedCategories] = useState<Category[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -91,43 +71,58 @@ export default function AdminContentPage() {
     meta_description_en: '',
     meta_description_rw: '',
     og_image_url: '',
+    audio_url: '',
     cover_image_url: '',
+    duration_seconds: 0,
     is_premium: false,
     language: 'rw' as 'en' | 'rw',
     categories: [] as string[],
   });
-  const [audioFiles, setAudioFiles] = useState<EpisodeAudio[]>([createEmptyAudioEntry()]);
   const [saving, setSaving] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingAudioIndex, setUploadingAudioIndex] = useState<number | null>(null);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
   const [useCoverUrl, setUseCoverUrl] = useState(false);
+  const [useAudioUrl, setUseAudioUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [customCategoryInput, setCustomCategoryInput] = useState('');
 
   useEffect(() => {
     if (authorized) {
-      fetchEpisodes();
+      fetchPodcasts().then(() => {
+        const podcastParam = searchParams?.get('podcast');
+        if (podcastParam) setSelectedPodcastId(podcastParam);
+      });
       fetchCategories();
       setLoading(false);
     }
-  }, [authorized]);
+  }, [authorized, searchParams]);
 
-  async function fetchEpisodes() {
+  useEffect(() => {
+    if (selectedPodcastId) {
+      fetchEpisodes(selectedPodcastId);
+    } else {
+      setEpisodes([]);
+    }
+  }, [selectedPodcastId]);
+
+  async function fetchPodcasts() {
+    const { data, error } = await supabase
+      .from('podcasts')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) console.error('fetchPodcasts error:', error);
+    if (!error && data) setPodcasts(data as Podcast[]);
+  }
+
+  async function fetchEpisodes(podcastId: string) {
     const { data, error } = await supabase
       .from('episodes')
-      .select('*, episode_contents(*)')
+      .select('*')
+      .eq('podcast_id', podcastId)
       .order('created_at', { ascending: false });
-    if (error) {
-      console.error('fetchEpisodes error:', error);
-    }
-    if (!error && data) {
-      const normalized = (data as Episode[]).map((row) => ({
-        ...row,
-        episode_contents: buildEpisodeAudioFiles((row as any).episode_contents, row),
-      }));
-      setEpisodes(normalized);
-    }
+    if (error) console.error('fetchEpisodes error:', error);
+    if (!error && data) setEpisodes(data as Episode[]);
   }
 
   async function fetchCategories() {
@@ -141,27 +136,30 @@ export default function AdminContentPage() {
     }
   }
 
+  const selectedPodcast = podcasts.find((p) => p.id === selectedPodcastId);
+
   function startEdit(ep: Episode) {
     setEditingId(ep.id);
     setFormData({
-      title_en: (ep as any).title_en || (ep as any).title || '',
-      title_rw: (ep as any).title_rw || '',
-      description_en: (ep as any).description_en || (ep as any).description || '',
-      description_rw: (ep as any).description_rw || '',
+      title_en: ep.title_en || '',
+      title_rw: ep.title_rw || '',
+      description_en: ep.description_en || '',
+      description_rw: ep.description_rw || '',
       slug: (ep as any).slug || '',
-      status: (ep as any).status || ((ep as any).published_at ? 'published' : 'draft'),
+      status: ep.status || (ep.published_at ? 'published' : 'draft'),
       scheduled_at: (ep as any).scheduled_at || '',
       meta_title_en: (ep as any).meta_title_en || '',
       meta_title_rw: (ep as any).meta_title_rw || '',
       meta_description_en: (ep as any).meta_description_en || '',
       meta_description_rw: (ep as any).meta_description_rw || '',
       og_image_url: (ep as any).og_image_url || '',
+      audio_url: ep.audio_url || '',
       cover_image_url: ep.cover_image_url || '',
+      duration_seconds: ep.duration_seconds ?? 0,
       is_premium: ep.is_premium,
-      language: (ep as any).language || 'rw',
-      categories: (ep as any).categories || [],
+      language: ep.language || 'rw',
+      categories: ep.categories || [],
     });
-    setAudioFiles(buildEpisodeAudioFiles((ep as any).episode_contents, ep));
     setShowNewForm(false);
   }
 
@@ -180,12 +178,13 @@ export default function AdminContentPage() {
       meta_description_en: '',
       meta_description_rw: '',
       og_image_url: '',
+      audio_url: '',
       cover_image_url: '',
+      duration_seconds: 0,
       is_premium: false,
       language: 'rw',
       categories: [],
     });
-    setAudioFiles([createEmptyAudioEntry()]);
     setShowNewForm(true);
   }
 
@@ -209,7 +208,7 @@ export default function AdminContentPage() {
     }
   }
 
-  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>, index: number) {
+  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -218,33 +217,16 @@ export default function AdminContentPage() {
       return;
     }
 
-    setUploadingAudioIndex(index);
+    setUploadingAudio(true);
     try {
       const duration = await getAudioDuration(file);
       const { url } = await uploadEpisodeAudio(file);
-      setAudioFiles((prev) => prev.map((af, i) =>
-        i === index ? { ...af, audio_url: url, duration_seconds: duration } : af
-      ));
+      setFormData({ ...formData, audio_url: url, duration_seconds: duration });
     } catch (error: any) {
       alert(error.message || 'Upload failed');
     } finally {
-      setUploadingAudioIndex(null);
+      setUploadingAudio(false);
     }
-  }
-
-  function addAudioFile() {
-    setAudioFiles((prev) => [...prev, { ...createEmptyAudioEntry(), sort_order: prev.length }]);
-  }
-
-  function removeAudioFile(index: number) {
-    setAudioFiles((prev) => prev.length > 1
-      ? prev.filter((_, i) => i !== index).map((af, i) => ({ ...af, sort_order: i }))
-      : prev
-    );
-  }
-
-  function updateAudioFile(index: number, patch: Partial<EpisodeAudio>) {
-    setAudioFiles((prev) => prev.map((af, i) => (i === index ? { ...af, ...patch } : af)));
   }
 
   async function handleSave() {
@@ -257,9 +239,15 @@ export default function AdminContentPage() {
         return;
       }
 
+      if (!selectedPodcastId) {
+        alert('No podcast selected');
+        return;
+      }
+
       const payload = {
         id: editingId,
         ...formData,
+        podcast_id: selectedPodcastId,
         scheduled_at: (formData.status === 'scheduled' && formData.scheduled_at) ? formData.scheduled_at : null,
         title_en: formData.title_en || null,
         title_rw: formData.title_rw || null,
@@ -271,8 +259,9 @@ export default function AdminContentPage() {
         meta_description_en: formData.meta_description_en || null,
         meta_description_rw: formData.meta_description_rw || null,
         og_image_url: formData.og_image_url || null,
+        audio_url: formData.audio_url || null,
         cover_image_url: formData.cover_image_url || null,
-        audio_files: audioFiles.filter((af) => af.audio_url.trim() !== ''),
+        duration_seconds: formData.duration_seconds || null,
       };
 
       const res = await fetch('/api/admin/content/save', {
@@ -290,7 +279,7 @@ export default function AdminContentPage() {
         return;
       }
 
-      await fetchEpisodes();
+      if (selectedPodcastId) await fetchEpisodes(selectedPodcastId);
       setEditingId(null);
       setShowNewForm(false);
     } finally {
@@ -324,7 +313,7 @@ export default function AdminContentPage() {
         return;
       }
 
-      await fetchEpisodes();
+      if (selectedPodcastId) await fetchEpisodes(selectedPodcastId);
     } finally {
       setSaving(false);
     }
@@ -355,7 +344,7 @@ export default function AdminContentPage() {
         return;
       }
 
-      await fetchEpisodes();
+      if (selectedPodcastId) await fetchEpisodes(selectedPodcastId);
     } finally {
       setSaving(false);
     }
@@ -370,11 +359,10 @@ export default function AdminContentPage() {
   }
 
   const filteredEpisodes = episodes.filter((ep) => {
-    const e: any = ep as any;
-    const t1 = (e.title_en || e.title || '').toLowerCase();
-    const t2 = (e.title_rw || '').toLowerCase();
-    const d1 = (e.description_en || e.description || '').toLowerCase();
-    const d2 = (e.description_rw || '').toLowerCase();
+    const t1 = (ep.title_en || '').toLowerCase();
+    const t2 = (ep.title_rw || '').toLowerCase();
+    const d1 = (ep.description_en || '').toLowerCase();
+    const d2 = (ep.description_rw || '').toLowerCase();
     const q = searchQuery.toLowerCase();
     return t1.includes(q) || t2.includes(q) || d1.includes(q) || d2.includes(q);
   });
@@ -384,27 +372,90 @@ export default function AdminContentPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Content Management</h1>
-          <p className="text-muted">Upload and manage podcast episodes</p>
+          <p className="text-muted">Manage episodes within each podcast</p>
         </div>
-        <button
-          onClick={startNew}
-          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
-        >
-          + New Episode
-        </button>
+        <div className="flex gap-3">
+          <Link
+            href="/admin/podcasts"
+            className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+          >
+            Manage Podcasts
+          </Link>
+          {selectedPodcastId && (
+            <button
+              onClick={startNew}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
+            >
+              + New Episode
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Podcast Selector */}
       <div className="mb-6">
-        <input
-          type="text"
-          placeholder="🔍 Search episodes..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
-        />
+        <label className="block text-sm font-medium mb-2">Select Podcast</label>
+        <div className="flex flex-wrap gap-3">
+          {podcasts.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => { setSelectedPodcastId(p.id); setEditingId(null); setShowNewForm(false); }}
+              className={`px-4 py-3 rounded-xl text-left transition ring-1 ${selectedPodcastId === p.id ? 'bg-primary/20 ring-primary/50' : 'bg-[var(--surface)] ring-white/5 hover:ring-white/20'}`}
+            >
+              <div className="flex items-center gap-3">
+                {p.cover_image_url && (
+                  <img src={p.cover_image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                )}
+                <div>
+                  <div className="text-sm font-semibold">
+                    {language === 'rw' ? p.title_rw : p.title_en}
+                  </div>
+                  <div className="text-xs text-muted">
+                    {p.total_episodes} episode{p.total_episodes !== 1 ? 's' : ''} · {p.speaker_name}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+          {podcasts.length === 0 && (
+            <div className="text-muted text-sm py-4">
+              No podcasts yet. <Link href="/admin/podcasts" className="text-primary hover:underline">Create one first</Link>.
+            </div>
+          )}
+        </div>
       </div>
 
-      {(editingId || showNewForm) && (
+      {selectedPodcast && (
+        <div className="mb-6 p-4 rounded-xl bg-[var(--surface)] ring-1 ring-white/5">
+          <div className="flex items-center gap-4">
+            {selectedPodcast.cover_image_url && (
+              <img src={selectedPodcast.cover_image_url} alt="" className="w-16 h-16 rounded-lg object-cover" />
+            )}
+            <div>
+              <h2 className="text-xl font-semibold">
+                {language === 'rw' ? selectedPodcast.title_rw : selectedPodcast.title_en}
+              </h2>
+              <p className="text-sm text-muted">
+                {language === 'rw' ? selectedPodcast.description_rw : selectedPodcast.description_en}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPodcastId && (
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="🔍 Search episodes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+          />
+        </div>
+      )}
+
+      {(editingId || showNewForm) && selectedPodcastId && (
         <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
           <h2 className="text-xl font-semibold mb-4">
             {editingId ? 'Edit Episode' : 'New Episode'}
@@ -644,82 +695,48 @@ export default function AdminContentPage() {
             </div>
             <div className="border-t border-white/10 pt-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Audio Tracks</h3>
+                <h3 className="text-sm font-semibold">Audio File</h3>
                 <button
                   type="button"
-                  onClick={addAudioFile}
-                  className="text-xs px-3 py-1.5 bg-primary/20 border border-primary/40 text-primary rounded-lg hover:bg-primary/30 transition font-semibold"
+                  onClick={() => setUseAudioUrl(!useAudioUrl)}
+                  className="text-xs text-primary hover:underline"
                 >
-                  + Add Track
+                  {useAudioUrl ? '📁 Upload File' : '🔗 Use URL'}
                 </button>
               </div>
-              <div className="space-y-3">
-                {audioFiles.map((af, index) => (
-                  <div key={index} className="p-3 bg-black/20 rounded-lg border border-white/10 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={af.label}
-                        onChange={(e) => updateAudioFile(index, { label: e.target.value })}
-                        placeholder="Label (e.g. Primary, English, Kinyarwanda)"
-                        className="flex-1 px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      <select
-                        value={af.language}
-                        onChange={(e) => updateAudioFile(index, { language: e.target.value as 'en' | 'rw' })}
-                        className="px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm"
-                      >
-                        <option value="rw">Kinyarwanda</option>
-                        <option value="en">English</option>
-                      </select>
-                      {audioFiles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeAudioFile(index)}
-                          className="px-2 py-1.5 text-xs bg-red-600/20 border border-red-600/40 text-red-400 rounded hover:bg-red-600/30 transition"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={af.audio_url}
-                        onChange={(e) => updateAudioFile(index, { audio_url: e.target.value })}
-                        placeholder="https://example.com/audio.mp3"
-                        className="flex-1 px-2 py-1.5 bg-black/20 border border-white/10 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                      <label
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer border border-white/10 hover:bg-white/10 transition ${uploadingAudioIndex === index ? 'opacity-50 pointer-events-none' : ''}`}
-                      >
-                        {uploadingAudioIndex === index ? 'Uploading…' : '📁 Upload'}
-                        <input
-                          type="file"
-                          accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
-                          onChange={(e) => handleAudioUpload(e, index)}
-                          disabled={uploadingAudioIndex === index}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted">
-                      <span>Duration:</span>
-                      <input
-                        type="number"
-                        value={af.duration_seconds}
-                        onChange={(e) => updateAudioFile(index, { duration_seconds: parseInt(e.target.value) || 0 })}
-                        className="w-24 px-2 py-1 bg-black/20 border border-white/10 rounded text-sm"
-                      />
-                      <span>seconds</span>
-                      {af.audio_url && (
-                        <span className="ml-auto text-green-400">✓ Audio set</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              {useAudioUrl ? (
+                <input
+                  type="text"
+                  value={formData.audio_url}
+                  onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
+                  placeholder="https://example.com/audio.mp3"
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
+                    onChange={handleAudioUpload}
+                    disabled={uploadingAudio}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
+                  />
+                  {uploadingAudio && <p className="text-xs text-primary mt-1">Uploading audio...</p>}
+                  {formData.audio_url && (
+                    <p className="text-xs text-green-400 mt-1">✓ Audio set ({formData.duration_seconds}s)</p>
+                  )}
+                  <p className="text-xs text-muted mt-1">Max 500MB. MP3, WAV, OGG, AAC, M4A.</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2 mt-3">
+                <label className="text-sm text-muted">Duration (seconds):</label>
+                <input
+                  type="number"
+                  value={formData.duration_seconds}
+                  onChange={(e) => setFormData({ ...formData, duration_seconds: parseInt(e.target.value) || 0 })}
+                  className="w-32 px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
               </div>
-              <p className="text-xs text-muted mt-2">Add multiple audio tracks for different languages or segments. Each track has its own URL, duration, and language. Max 500MB per file.</p>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -796,14 +813,14 @@ export default function AdminContentPage() {
                     {ep.language === 'en' ? 'EN' : 'RW'}
                   </span>
                   <h3 className="text-lg font-semibold">
-                    {(ep as any).title_en || (ep as any).title_rw || ep.title}
+                    {ep.title_en || ep.title_rw || 'Untitled'}
                   </h3>
                 </div>
                 <p className="text-sm text-muted mb-2">
-                  {(ep as any).description_en || (ep as any).description_rw || ep.description || 'No description'}
+                  {ep.description_en || ep.description_rw || 'No description'}
                 </p>
                 <div className="flex gap-4 text-xs text-muted">
-                  <span>{ep.episode_contents && ep.episode_contents.length > 0 ? `${ep.episode_contents.length} track${ep.episode_contents.length > 1 ? 's' : ''}` : 'No audio'}</span>
+                  <span>{ep.audio_url ? `${ep.duration_seconds ?? 0}s` : 'No audio'}</span>
                   <span>{ep.is_premium ? '👑 Premium' : 'Free'}</span>
                   <span>{ep.published_at ? `Published ${new Date(ep.published_at).toLocaleDateString()}` : 'Draft'}</span>
                 </div>

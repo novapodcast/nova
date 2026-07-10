@@ -110,7 +110,7 @@ export default function PaymentCallbackPage() {
                 {t('common.viewDashboard', language)}
               </Link>
               <Link
-                href="/episodes"
+                href="/podcasts"
                 className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition"
               >
                 {t('dashboard.browseEpisodes', language)}

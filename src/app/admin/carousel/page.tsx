@@ -53,7 +53,7 @@ export default function AdminCarouselPage() {
       description_rw: '',
       cta_label_en: 'Play Now',
       cta_label_rw: 'Tangira Kumva',
-      cta_url: '/episodes',
+      cta_url: '/podcasts',
       background_color: '#0a0a0a',
       is_active: true,
       sort_order: slides.length,

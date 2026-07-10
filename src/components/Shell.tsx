@@ -65,7 +65,7 @@ function Header() {
           </svg>
         </button>
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
-          <Link href="/episodes" className="hover:text-white">{t('nav.episodes', language)}</Link>
+          <Link href="/podcasts" className="hover:text-white">{t('nav.podcasts', language)}</Link>
           <Link href="/favorites" className="hover:text-white">{language === 'rw' ? 'Ibikunzwe' : 'Favorites'}</Link>
           <Link href="/pricing" className="hover:text-white">{t('nav.pricing', language)}</Link>
           <Link href="/about" className="hover:text-white">{t('nav.about', language)}</Link>
@@ -109,8 +109,8 @@ function Header() {
               </button>
             </div>
             <nav className="flex flex-col gap-4 text-base text-muted">
-              <Link href="/episodes" className="hover:text-white" onClick={() => setMobileOpen(false)}>
-                {t('nav.episodes', language)}
+              <Link href="/podcasts" className="hover:text-white" onClick={() => setMobileOpen(false)}>
+                {t('nav.podcasts', language)}
               </Link>
               <Link href="/favorites" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {language === 'rw' ? 'Ibikunzwe' : 'Favorites'}
@@ -177,7 +177,7 @@ function Footer() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-white/80 mb-3">{language === 'rw' ? 'Ibyerekeye' : 'Explore'}</div>
             <div className="flex flex-col gap-2 text-sm text-muted">
-              <Link href="/episodes" className="hover:text-white transition-colors">{t('nav.episodes', language)}</Link>
+              <Link href="/podcasts" className="hover:text-white transition-colors">{t('nav.podcasts', language)}</Link>
               <Link href="/pricing" className="hover:text-white transition-colors">{t('nav.pricing', language)}</Link>
               <Link href="/about" className="hover:text-white transition-colors">{t('nav.about', language)}</Link>
               <Link href="/contact" className="hover:text-white transition-colors">{t('nav.contact', language)}</Link>

@@ -14,25 +14,14 @@ function isAdminEmailServer(email: string | null | undefined): boolean {
 
 type SaveBody = {
   id?: string | null;
-  podcast_id?: string | null;
   title_en?: string;
   title_rw?: string;
-  description_en?: string;
-  description_rw?: string;
-  slug?: string | null;
-  status?: 'draft' | 'scheduled' | 'published';
-  scheduled_at?: string | null;
-  meta_title_en?: string | null;
-  meta_title_rw?: string | null;
-  meta_description_en?: string | null;
-  meta_description_rw?: string | null;
-  og_image_url?: string | null;
-  audio_url?: string | null;
+  description_en?: string | null;
+  description_rw?: string | null;
   cover_image_url?: string | null;
-  duration_seconds?: number | null;
-  is_premium?: boolean;
-  language?: 'en' | 'rw';
-  categories?: string[];
+  category_id?: string | null;
+  speaker_name?: string;
+  is_active?: boolean;
 };
 
 export async function POST(request: NextRequest) {
@@ -94,74 +83,38 @@ export async function POST(request: NextRequest) {
     if (!titleAny) {
       return NextResponse.json({ error: 'Missing title_en or title_rw' }, { status: 400 });
     }
-    if (!body.podcast_id) {
-      return NextResponse.json({ error: 'Missing podcast_id' }, { status: 400 });
-    }
 
     const clientForWrite = admin ?? supabase;
-
-    const slug = (body.slug && body.slug.trim()) ? body.slug.trim() : (titleAny || '')
-      .toLowerCase()
-      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || null;
-
     const str = (v: string | null | undefined) => (v && v.trim()) ? v.trim() : null;
 
-    const toNullableIso = (v: unknown) => {
-      if (typeof v !== 'string') return null;
-      const s = v.trim();
-      if (!s) return null;
-      const d = new Date(s);
-      if (Number.isNaN(d.getTime())) return null;
-      return d.toISOString();
-    };
-
     const writePayload: any = {
-      podcast_id: body.podcast_id,
       title_en: str(body.title_en),
       title_rw: str(body.title_rw),
       description_en: str(body.description_en),
       description_rw: str(body.description_rw),
-      slug,
-      status: body.status || 'draft',
-      scheduled_at: toNullableIso(body.scheduled_at),
-      meta_title_en: str(body.meta_title_en),
-      meta_title_rw: str(body.meta_title_rw),
-      meta_description_en: str(body.meta_description_en),
-      meta_description_rw: str(body.meta_description_rw),
-      og_image_url: str(body.og_image_url),
-      audio_url: str(body.audio_url),
-      cover_image_url: str(body.cover_image_url),
-      duration_seconds: body.duration_seconds ?? null,
-      is_premium: body.is_premium ?? false,
-      language: body.language ?? 'rw',
-      categories: body.categories ?? [],
+      cover_image_url: body.cover_image_url || '',
+      category_id: body.category_id || null,
+      speaker_name: body.speaker_name || '',
+      is_active: body.is_active ?? true,
     };
-
-    let episodeId: string | null = null;
 
     if (body.id) {
       const { error: updateErr } = await clientForWrite
-        .from('episodes')
+        .from('podcasts')
         .update(writePayload)
         .eq('id', body.id);
 
       if (updateErr) {
         return NextResponse.json({ error: updateErr.message }, { status: 400 });
       }
-      episodeId = body.id;
     } else {
-      const { data: inserted, error: insertErr } = await clientForWrite
-        .from('episodes')
-        .insert(writePayload)
-        .select('id')
-        .single();
+      const { error: insertErr } = await clientForWrite
+        .from('podcasts')
+        .insert(writePayload);
 
       if (insertErr) {
         return NextResponse.json({ error: insertErr.message }, { status: 400 });
       }
-      episodeId = inserted?.id ?? null;
     }
 
     return NextResponse.json({ ok: true });
