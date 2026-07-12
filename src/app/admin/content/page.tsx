@@ -19,6 +19,7 @@ type Podcast = {
   is_active: boolean;
   total_episodes: number;
   total_listeners: number;
+  is_system: boolean;
 };
 
 type Episode = {
@@ -109,10 +110,10 @@ export default function AdminContentPage() {
   async function fetchPodcasts() {
     const { data, error } = await supabase
       .from('podcasts')
-      .select('*')
+      .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, is_active, total_episodes, total_listeners, is_system')
       .order('created_at', { ascending: false });
     if (error) console.error('fetchPodcasts error:', error);
-    if (!error && data) setPodcasts(data as Podcast[]);
+    if (!error && data) setPodcasts((data as Podcast[]).filter((p) => !p.is_system));
   }
 
   async function fetchEpisodes(podcastId: string) {

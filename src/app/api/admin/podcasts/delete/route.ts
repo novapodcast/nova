@@ -73,6 +73,20 @@ export async function POST(request: NextRequest) {
 
     const clientForWrite = admin ?? supabase;
 
+    const { data: existing, error: fetchErr } = await clientForWrite
+      .from('podcasts')
+      .select('is_system')
+      .eq('id', body.id)
+      .single();
+
+    if (fetchErr) {
+      return NextResponse.json({ error: fetchErr.message }, { status: 400 });
+    }
+
+    if (existing?.is_system) {
+      return NextResponse.json({ error: 'System podcasts cannot be deleted.' }, { status: 403 });
+    }
+
     const { error: episodesErr } = await clientForWrite
       .from('episodes')
       .delete()

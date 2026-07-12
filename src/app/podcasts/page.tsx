@@ -15,6 +15,7 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
+  is_system: boolean | null;
 }
 
 export default function PodcastsPage() {
@@ -27,8 +28,9 @@ export default function PodcastsPage() {
     const load = async () => {
       const { data, error } = await supabase
         .from('podcasts')
-        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners')
+        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners, is_system')
         .eq('is_active', true)
+        .eq('is_system', false)
         .order('total_listeners', { ascending: false });
       if (!error && data) {
         setPodcasts(data as Podcast[]);
@@ -39,6 +41,7 @@ export default function PodcastsPage() {
   }, []);
 
   const visiblePodcasts = podcasts.filter((p) => {
+    if (p.is_system) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (

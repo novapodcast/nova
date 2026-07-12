@@ -99,6 +99,20 @@ export async function POST(request: NextRequest) {
     };
 
     if (body.id) {
+      const { data: existing, error: fetchErr } = await clientForWrite
+        .from('podcasts')
+        .select('is_system')
+        .eq('id', body.id)
+        .single();
+
+      if (fetchErr) {
+        return NextResponse.json({ error: fetchErr.message }, { status: 400 });
+      }
+
+      if (existing?.is_system) {
+        return NextResponse.json({ error: 'System podcasts cannot be modified.' }, { status: 403 });
+      }
+
       const { error: updateErr } = await clientForWrite
         .from('podcasts')
         .update(writePayload)
@@ -108,6 +122,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: updateErr.message }, { status: 400 });
       }
     } else {
+      writePayload.is_system = false;
       const { error: insertErr } = await clientForWrite
         .from('podcasts')
         .insert(writePayload);

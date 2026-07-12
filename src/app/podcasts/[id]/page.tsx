@@ -15,6 +15,7 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
+  is_system: boolean | null;
 }
 
 interface Episode {
@@ -42,11 +43,11 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
     const load = async () => {
       const { data: pod, error: podError } = await supabase
         .from('podcasts')
-        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners')
+        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners, is_system')
         .eq('id', params.id)
         .single();
 
-      if (podError || !pod) {
+      if (podError || !pod || pod.is_system) {
         setError(true);
         setLoading(false);
         return;

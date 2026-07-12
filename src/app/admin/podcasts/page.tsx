@@ -18,6 +18,7 @@ type Podcast = {
   is_active: boolean;
   total_episodes: number;
   total_listeners: number;
+  is_system: boolean;
 };
 
 type Category = {
@@ -62,7 +63,7 @@ export default function AdminPodcastsPage() {
   async function fetchPodcasts() {
     const { data, error } = await supabase
       .from('podcasts')
-      .select('*')
+      .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, category_id, speaker_name, is_active, total_episodes, total_listeners, is_system')
       .order('created_at', { ascending: false });
     if (error) console.error('fetchPodcasts error:', error);
     if (!error && data) setPodcasts(data as Podcast[]);
@@ -78,6 +79,10 @@ export default function AdminPodcastsPage() {
   }
 
   function startEdit(p: Podcast) {
+    if (p.is_system) {
+      alert('System podcasts cannot be edited.');
+      return;
+    }
     setEditingId(p.id);
     setFormData({
       title_en: p.title_en,
@@ -171,6 +176,11 @@ export default function AdminPodcastsPage() {
   }
 
   async function handleDelete(id: string) {
+    const target = podcasts.find((p) => p.id === id);
+    if (target?.is_system) {
+      alert('System podcasts cannot be deleted.');
+      return;
+    }
     if (!confirm('Delete this podcast and all its episodes?')) return;
     setSaving(true);
     try {
@@ -209,6 +219,9 @@ export default function AdminPodcastsPage() {
       </div>
     );
   }
+
+  const regularPodcasts = podcasts.filter((p) => !p.is_system);
+  const systemPodcasts = podcasts.filter((p) => p.is_system);
 
   return (
     <div className="container py-12 md:py-16">
@@ -391,7 +404,7 @@ export default function AdminPodcastsPage() {
       )}
 
       <div className="space-y-4">
-        {podcasts.map((p) => (
+        {regularPodcasts.map((p) => (
           <div key={p.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
             <div className="flex items-start justify-between">
               <div className="flex-1 flex items-start gap-4">
@@ -438,9 +451,40 @@ export default function AdminPodcastsPage() {
         ))}
       </div>
 
-      {podcasts.length === 0 && (
+      {regularPodcasts.length === 0 && (
         <div className="text-center py-12 text-muted">
           No podcasts yet. Click &quot;New Podcast&quot; to get started.
+        </div>
+      )}
+
+      {systemPodcasts.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+            <span>System Podcasts</span>
+            <span className="px-2 py-1 text-xs rounded-full bg-white/10 text-white/70">Protected</span>
+          </h2>
+          <p className="text-sm text-muted mb-4">
+            These records are created automatically to maintain data integrity and cannot be edited or deleted.
+          </p>
+          <div className="space-y-3">
+            {systemPodcasts.map((p) => (
+              <div key={p.id} className="bg-black/30 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{language === 'rw' ? p.title_rw : p.title_en}</h3>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70 uppercase tracking-wide">System</span>
+                  </div>
+                  <p className="text-sm text-muted mt-1 max-w-xl">
+                    {(language === 'rw' ? p.description_rw : p.description_en) || 'Automatically generated system podcast.'}
+                  </p>
+                </div>
+                <div className="text-xs text-muted flex flex-col items-end">
+                  <span>{p.total_episodes} episode{p.total_episodes !== 1 ? 's' : ''}</span>
+                  <span>{p.speaker_name || 'System generated'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
