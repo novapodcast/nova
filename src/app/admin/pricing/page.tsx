@@ -51,7 +51,7 @@ export default function AdminPricingPage() {
     const { data, error } = await supabase
       .from('pricing_tiers')
       .select('*')
-      .order('sort_order', { ascending: true });
+      .order('plan_name', { ascending: true });
     
     if (!error && data) {
       setTiers(data as PricingTier[]);
@@ -165,13 +165,24 @@ export default function AdminPricingPage() {
         <p className="text-muted">{t('admin.pricingSubtitle', language)}</p>
       </div>
 
+      <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+        <h3 className="text-sm font-semibold text-blue-400 mb-2">💡 Pricing Structure</h3>
+        <ul className="text-sm text-blue-300 space-y-1">
+          <li>• Each plan has <strong>two variants</strong>: Monthly (1m) and Annual (12m)</li>
+          <li>• <strong>Monthly</strong>: Users pay per month (e.g., 1,500 RWF/month)</li>
+          <li>• <strong>Annual</strong>: Users pay once per year, typically with 25% discount (e.g., 13,500 RWF/year = 1,125 RWF/month)</li>
+          <li>• Edit each variant separately to set different prices and features</li>
+          <li>• The public pricing page shows both options with a Monthly/Annual toggle</li>
+        </ul>
+      </div>
+
       {message && (
         <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
           {message.text}
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {tiers.map((tier) => (
           <div key={tier.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
             {editingId === tier.id ? (
@@ -273,14 +284,23 @@ export default function AdminPricingPage() {
                 <div className="flex-grow">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-xl font-bold">{tier.display_name_en}</h3>
-                    <span className="text-sm text-muted">({tier.plan_name})</span>
+                    <span className="text-sm font-mono bg-black/30 px-2 py-0.5 rounded">{tier.plan_name}</span>
+                    {tier.duration_months === 1 && <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-semibold">MONTHLY</span>}
+                    {tier.duration_months === 12 && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded font-semibold">ANNUAL</span>}
                     {tier.is_highlighted && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded">{t('admin.mostPopular', language)}</span>}
                     {!tier.is_active && <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">{t('admin.inactive', language)}</span>}
                   </div>
                   <div className="mb-3">
                     <span className="text-2xl font-bold">{tier.price_rwf.toLocaleString()} RWF</span>
-                    {tier.duration_months > 0 && <span className="text-muted ml-2">/ {tier.duration_months} month{tier.duration_months > 1 ? 's' : ''}</span>}
-                    {tier.savings_rwf > 0 && <span className="text-green-400 ml-3 text-sm">Save {tier.savings_rwf} RWF</span>}
+                    {tier.duration_months === 1 && <span className="text-muted ml-2">per month</span>}
+                    {tier.duration_months === 12 && (
+                      <>
+                        <span className="text-muted ml-2">per year</span>
+                        <span className="text-sm text-primary ml-3">({Math.round(tier.price_rwf / 12).toLocaleString()} RWF/mo)</span>
+                      </>
+                    )}
+                    {tier.duration_months > 1 && tier.duration_months !== 12 && <span className="text-muted ml-2">/ {tier.duration_months} months</span>}
+                    {tier.savings_rwf > 0 && <span className="text-green-400 ml-3 text-sm">💰 Save {tier.savings_rwf.toLocaleString()} RWF</span>}
                   </div>
                   <div className="text-sm text-muted">
                     <strong>Features:</strong> {tier.features_en.join(', ')}

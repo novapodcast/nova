@@ -79,17 +79,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as SaveBody;
-    const titleAny = body.title_en || body.title_rw;
-    if (!titleAny) {
-      return NextResponse.json({ error: 'Missing title_en or title_rw' }, { status: 400 });
-    }
-
     const clientForWrite = admin ?? supabase;
     const str = (v: string | null | undefined) => (v && v.trim()) ? v.trim() : null;
 
+    // Validate: at least one title must be provided
+    const titleEn = str(body.title_en);
+    const titleRw = str(body.title_rw);
+    
+    if (!titleEn && !titleRw) {
+      return NextResponse.json({ 
+        error: 'Please provide at least one title (English or Kinyarwanda)' 
+      }, { status: 400 });
+    }
+
+    // Auto-populate missing title with the provided one
+    const finalTitleEn = titleEn || titleRw || 'Untitled';
+    const finalTitleRw = titleRw || titleEn || 'Ntacyo yiswe';
+
     const writePayload: any = {
-      title_en: str(body.title_en),
-      title_rw: str(body.title_rw),
+      title_en: finalTitleEn,
+      title_rw: finalTitleRw,
       description_en: str(body.description_en),
       description_rw: str(body.description_rw),
       cover_image_url: body.cover_image_url || '',

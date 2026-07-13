@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { selectAdminPodcasts } from '@/lib/data/podcasts';
 import { useAdminGuard } from '@/lib/useAdminGuard';
 import { uploadEpisodeCover } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -33,6 +35,7 @@ type Category = {
 export default function AdminPodcastsPage() {
   const { language } = useLanguage();
   const { loading: guardLoading, authorized } = useAdminGuard();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -53,20 +56,31 @@ export default function AdminPodcastsPage() {
   });
 
   useEffect(() => {
-    if (authorized) {
-      fetchPodcasts();
-      fetchCategories();
-      setLoading(false);
-    }
+    if (!authorized) return;
+    fetchPodcasts();
+    fetchCategories();
+    setLoading(false);
   }, [authorized]);
 
+  useEffect(() => {
+    if (!authorized) return;
+    const shouldCreate = searchParams?.get('create');
+    if (shouldCreate !== null) {
+      startNew();
+    }
+  }, [authorized, searchParams]);
+
   async function fetchPodcasts() {
-    const { data, error } = await supabase
-      .from('podcasts')
-      .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, category_id, speaker_name, is_active, total_episodes, total_listeners, is_system')
+    const { data, error } = await selectAdminPodcasts(supabase)
       .order('created_at', { ascending: false });
     if (error) console.error('fetchPodcasts error:', error);
-    if (!error && data) setPodcasts(data as Podcast[]);
+    if (!error && data) {
+      const list = data as unknown as Podcast[];
+      setPodcasts(list);
+      if (list.length === 0) {
+        startNew();
+      }
+    }
   }
 
   async function fetchCategories() {
@@ -131,6 +145,12 @@ export default function AdminPodcastsPage() {
   }
 
   async function handleSave() {
+    // Frontend validation: require at least one title
+    if (!formData.title_en?.trim() && !formData.title_rw?.trim()) {
+      alert('Please provide at least one title (English or Kinyarwanda)');
+      return;
+    }
+
     setSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -227,8 +247,8 @@ export default function AdminPodcastsPage() {
     <div className="container py-12 md:py-16">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Podcasts</h1>
-          <p className="text-muted">Create and manage podcast shows</p>
+          <h1 className="text-3xl font-bold mb-2">Podcast Shows</h1>
+          <p className="text-muted">Manage your podcast series. Each show can contain multiple episodes.</p>
         </div>
         <div className="flex gap-3">
           <Link
@@ -239,18 +259,21 @@ export default function AdminPodcastsPage() {
           </Link>
           <button
             onClick={startNew}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
+            className="px-4 py-2 bg-primary text-black rounded-lg hover:bg-primary/90 transition font-semibold"
           >
-            + New Podcast
+            + New Podcast Show
           </button>
         </div>
       </div>
 
       {(editingId || showNewForm) && (
         <div className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5 mb-8">
-          <h2 className="text-xl font-semibold mb-4">
-            {editingId ? 'Edit Podcast' : 'New Podcast'}
+          <h2 className="text-xl font-semibold mb-2">
+            {editingId ? 'Edit Podcast Show' : 'Create New Podcast Show'}
           </h2>
+          <p className="text-sm text-muted mb-4">
+            {editingId ? 'Update the details of this podcast series.' : 'Create a new podcast series. After creating the show, you can add episodes to it.'}
+          </p>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">Podcast Language</label>
@@ -428,20 +451,20 @@ export default function AdminPodcastsPage() {
               <div className="flex gap-2">
                 <Link
                   href={`/admin/content?podcast=${p.id}`}
-                  className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition"
+                  className="px-4 py-2 text-sm bg-primary text-black font-semibold rounded-lg hover:bg-primary/90 transition flex items-center gap-2"
                 >
-                  Episodes
+                  📝 Manage Episodes
                 </Link>
                 <button
                   onClick={() => startEdit(p)}
-                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                  className="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 transition"
                 >
-                  Edit
+                  Edit Show
                 </button>
                 <button
                   onClick={() => handleDelete(p.id)}
                   disabled={saving}
-                  className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition disabled:opacity-50"
+                  className="px-3 py-1 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -451,9 +474,19 @@ export default function AdminPodcastsPage() {
         ))}
       </div>
 
-      {regularPodcasts.length === 0 && (
-        <div className="text-center py-12 text-muted">
-          No podcasts yet. Click &quot;New Podcast&quot; to get started.
+      {regularPodcasts.length === 0 && !showNewForm && (
+        <div className="text-center py-12 bg-[var(--surface)] rounded-xl ring-1 ring-white/5">
+          <div className="text-4xl mb-4">🎙️</div>
+          <h3 className="text-lg font-semibold mb-2">No Podcast Shows Yet</h3>
+          <p className="text-muted mb-6 max-w-md mx-auto">
+            Create your first podcast show (like &quot;Sunday Sermons&quot; or &quot;Learn Kinyarwanda&quot;), then add episodes to it.
+          </p>
+          <button
+            onClick={startNew}
+            className="px-6 py-3 bg-primary text-black rounded-lg hover:bg-primary/90 transition font-semibold"
+          >
+            + Create Your First Podcast Show
+          </button>
         </div>
       )}
 

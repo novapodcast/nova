@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { selectPodcasts } from '@/lib/data/podcasts';
 import { useAdminGuard } from '@/lib/useAdminGuard';
 import { uploadEpisodeCover, uploadEpisodeAudio, getAudioDuration } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -108,12 +109,10 @@ export default function AdminContentPage() {
   }, [selectedPodcastId]);
 
   async function fetchPodcasts() {
-    const { data, error } = await supabase
-      .from('podcasts')
-      .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, is_active, total_episodes, total_listeners, is_system')
+    const { data, error } = await selectPodcasts(supabase, { includeSystem: false, includeInactive: true })
       .order('created_at', { ascending: false });
     if (error) console.error('fetchPodcasts error:', error);
-    if (!error && data) setPodcasts((data as Podcast[]).filter((p) => !p.is_system));
+    if (!error && data) setPodcasts(data as unknown as Podcast[]);
   }
 
   async function fetchEpisodes(podcastId: string) {
@@ -370,17 +369,37 @@ export default function AdminContentPage() {
 
   return (
     <div className="container py-12 md:py-16">
+      {/* Breadcrumb Navigation */}
+      <div className="mb-6 flex items-center gap-2 text-sm text-muted">
+        <Link href="/admin/dashboard" className="hover:text-primary transition">Dashboard</Link>
+        <span>›</span>
+        <Link href="/admin/podcasts" className="hover:text-primary transition">Podcasts</Link>
+        {selectedPodcast && (
+          <>
+            <span>›</span>
+            <span className="text-white">{language === 'rw' ? selectedPodcast.title_rw : selectedPodcast.title_en}</span>
+          </>
+        )}
+      </div>
+
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Content Management</h1>
-          <p className="text-muted">Manage episodes within each podcast</p>
+          <h1 className="text-3xl font-bold mb-2">
+            {selectedPodcast ? 'Manage Episodes' : 'Episode Management'}
+          </h1>
+          <p className="text-muted">
+            {selectedPodcast 
+              ? `Add and manage episodes for "${language === 'rw' ? selectedPodcast.title_rw : selectedPodcast.title_en}"`
+              : 'Select a podcast show to manage its episodes'
+            }
+          </p>
         </div>
         <div className="flex gap-3">
           <Link
             href="/admin/podcasts"
             className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
           >
-            Manage Podcasts
+            ← Back to Podcasts
           </Link>
           {selectedPodcastId && (
             <button
@@ -394,52 +413,83 @@ export default function AdminContentPage() {
       </div>
 
       {/* Podcast Selector */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Select Podcast</label>
-        <div className="flex flex-wrap gap-3">
-          {podcasts.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => { setSelectedPodcastId(p.id); setEditingId(null); setShowNewForm(false); }}
-              className={`px-4 py-3 rounded-xl text-left transition ring-1 ${selectedPodcastId === p.id ? 'bg-primary/20 ring-primary/50' : 'bg-[var(--surface)] ring-white/5 hover:ring-white/20'}`}
-            >
-              <div className="flex items-center gap-3">
-                {p.cover_image_url && (
-                  <img src={p.cover_image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                )}
-                <div>
-                  <div className="text-sm font-semibold">
-                    {language === 'rw' ? p.title_rw : p.title_en}
+      {!selectedPodcastId && (
+        <div className="mb-8 bg-[var(--surface)] rounded-xl p-8 ring-1 ring-white/5 text-center">
+          <h2 className="text-xl font-semibold mb-3">Select a Podcast</h2>
+          <p className="text-muted mb-6">Choose which podcast you'd like to manage episodes for</p>
+          
+          {podcasts.length === 0 ? (
+            <div className="py-8">
+              <div className="text-4xl mb-4">🎙️</div>
+              <p className="text-lg font-semibold mb-2">No Podcast Shows Yet</p>
+              <p className="text-muted mb-6 max-w-md mx-auto">
+                Before you can add episodes, you need to create a podcast show (like "Sunday Sermons" or "Learn Kinyarwanda").
+              </p>
+              <Link
+                href="/admin/podcasts?create"
+                className="inline-block px-6 py-3 bg-primary text-black font-semibold rounded-lg hover:bg-primary/90 transition"
+              >
+                + Create Your First Podcast Show
+              </Link>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {podcasts.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => { setSelectedPodcastId(p.id); setEditingId(null); setShowNewForm(false); }}
+                  className="p-4 rounded-xl text-left transition ring-1 bg-black/20 ring-white/10 hover:ring-primary/50 hover:bg-primary/5"
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    {p.cover_image_url && (
+                      <img src={p.cover_image_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">
+                        {language === 'rw' ? p.title_rw : p.title_en}
+                      </div>
+                      <div className="text-xs text-muted">
+                        {p.speaker_name}
+                      </div>
+                    </div>
                   </div>
                   <div className="text-xs text-muted">
-                    {p.total_episodes} episode{p.total_episodes !== 1 ? 's' : ''} · {p.speaker_name}
+                    {p.total_episodes} episode{p.total_episodes !== 1 ? 's' : ''}
                   </div>
-                </div>
-              </div>
-            </button>
-          ))}
-          {podcasts.length === 0 && (
-            <div className="text-muted text-sm py-4">
-              No podcasts yet. <Link href="/admin/podcasts" className="text-primary hover:underline">Create one first</Link>.
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {selectedPodcast && (
-        <div className="mb-6 p-4 rounded-xl bg-[var(--surface)] ring-1 ring-white/5">
-          <div className="flex items-center gap-4">
-            {selectedPodcast.cover_image_url && (
-              <img src={selectedPodcast.cover_image_url} alt="" className="w-16 h-16 rounded-lg object-cover" />
-            )}
-            <div>
-              <h2 className="text-xl font-semibold">
-                {language === 'rw' ? selectedPodcast.title_rw : selectedPodcast.title_en}
-              </h2>
-              <p className="text-sm text-muted">
-                {language === 'rw' ? selectedPodcast.description_rw : selectedPodcast.description_en}
-              </p>
+        <div className="mb-6 p-6 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 ring-1 ring-primary/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {selectedPodcast.cover_image_url && (
+                <img src={selectedPodcast.cover_image_url} alt="" className="w-20 h-20 rounded-lg object-cover ring-2 ring-primary/30" />
+              )}
+              <div>
+                <div className="text-xs text-primary font-semibold mb-1 uppercase tracking-wide">Podcast Show</div>
+                <h2 className="text-2xl font-bold mb-1">
+                  {language === 'rw' ? selectedPodcast.title_rw : selectedPodcast.title_en}
+                </h2>
+                <p className="text-sm text-muted max-w-2xl">
+                  {language === 'rw' ? selectedPodcast.description_rw : selectedPodcast.description_en || 'No description'}
+                </p>
+                <div className="flex gap-4 mt-2 text-xs text-muted">
+                  <span>🎙️ Host: {selectedPodcast.speaker_name}</span>
+                  <span>📊 {selectedPodcast.total_episodes} episode{selectedPodcast.total_episodes !== 1 ? 's' : ''} in this show</span>
+                </div>
+              </div>
             </div>
+            <button
+              onClick={() => { setSelectedPodcastId(null); setEditingId(null); setShowNewForm(false); }}
+              className="px-4 py-2 text-sm bg-white/10 rounded-lg hover:bg-white/20 transition"
+            >
+              Change Podcast
+            </button>
           </div>
         </div>
       )}
@@ -694,54 +744,84 @@ export default function AdminContentPage() {
                 <p className="text-xs text-muted mt-1">💡 Tip: Use predefined categories for consistency, or add custom ones as needed.</p>
               </div>
             </div>
-            <div className="border-t border-white/10 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">Audio File</h3>
-                <button
-                  type="button"
-                  onClick={() => setUseAudioUrl(!useAudioUrl)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  {useAudioUrl ? '📁 Upload File' : '🔗 Use URL'}
-                </button>
-              </div>
-              {useAudioUrl ? (
-                <input
-                  type="text"
-                  value={formData.audio_url}
-                  onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
-                  placeholder="https://example.com/audio.mp3"
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              ) : (
-                <div>
-                  <input
-                    type="file"
-                    accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
-                    onChange={handleAudioUpload}
-                    disabled={uploadingAudio}
-                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50"
-                  />
-                  {uploadingAudio && <p className="text-xs text-primary mt-1">Uploading audio...</p>}
-                  {formData.audio_url && (
-                    <p className="text-xs text-green-400 mt-1">✓ Audio set ({formData.duration_seconds}s)</p>
-                  )}
-                  <p className="text-xs text-muted mt-1">Max 500MB. MP3, WAV, OGG, AAC, M4A.</p>
+
+            {/* Audio Upload - Primary Section */}
+            <div className="border-t border-white/10 pt-6">
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      🎵 Episode Audio
+                      <span className="text-xs font-normal text-red-400">*Required</span>
+                    </h3>
+                    <p className="text-xs text-muted mt-1">Upload the main audio file for this episode</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseAudioUrl(!useAudioUrl)}
+                    className="text-xs text-primary hover:underline font-semibold"
+                  >
+                    {useAudioUrl ? '📁 Upload File Instead' : '🔗 Use URL Instead'}
+                  </button>
                 </div>
-              )}
-              <div className="flex items-center gap-2 mt-3">
-                <label className="text-sm text-muted">Duration (seconds):</label>
-                <input
-                  type="number"
-                  value={formData.duration_seconds}
-                  onChange={(e) => setFormData({ ...formData, duration_seconds: parseInt(e.target.value) || 0 })}
-                  className="w-32 px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                
+                {useAudioUrl ? (
+                  <div>
+                    <input
+                      type="text"
+                      value={formData.audio_url}
+                      onChange={(e) => setFormData({ ...formData, audio_url: e.target.value })}
+                      placeholder="https://example.com/audio.mp3"
+                      className="w-full px-4 py-3 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    {formData.audio_url && (
+                      <div className="mt-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <p className="text-sm text-green-400">✓ Audio URL set</p>
+                        <audio src={formData.audio_url} controls className="w-full mt-2" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="file"
+                      accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/m4a"
+                      onChange={handleAudioUpload}
+                      disabled={uploadingAudio}
+                      className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg file:mr-4 file:py-2.5 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-black hover:file:opacity-90 disabled:opacity-50 cursor-pointer"
+                    />
+                    {uploadingAudio && (
+                      <div className="mt-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                        <p className="text-sm text-primary">⏳ Uploading audio... Please wait.</p>
+                      </div>
+                    )}
+                    {!uploadingAudio && formData.audio_url && (
+                      <div className="mt-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <p className="text-sm text-green-400 mb-2">✓ Audio uploaded successfully ({formData.duration_seconds}s)</p>
+                        <audio src={formData.audio_url} controls className="w-full" />
+                      </div>
+                    )}
+                    <p className="text-xs text-muted mt-2">📦 Max 500MB • Formats: MP3, WAV, OGG, AAC, M4A</p>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-white/10">
+                  <label className="text-sm font-medium">Duration (seconds):</label>
+                  <input
+                    type="number"
+                    value={formData.duration_seconds}
+                    onChange={(e) => setFormData({ ...formData, duration_seconds: parseInt(e.target.value) || 0 })}
+                    className="w-32 px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <span className="text-xs text-muted">Auto-detected on upload</span>
+                </div>
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium">Cover Image</label>
+
+            {/* Cover Image - Optional */}
+            <div className="border-t border-white/10 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">Episode Cover Image <span className="text-xs text-muted">(Optional)</span></label>
                 <button
                   type="button"
                   onClick={() => setUseCoverUrl(!useCoverUrl)}
@@ -750,6 +830,7 @@ export default function AdminContentPage() {
                   {useCoverUrl ? '📁 Upload File' : '🔗 Use URL'}
                 </button>
               </div>
+              <p className="text-xs text-muted mb-3">Leave empty to use the podcast's cover image</p>
               {useCoverUrl ? (
                 <input
                   type="text"
