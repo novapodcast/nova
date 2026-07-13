@@ -133,6 +133,8 @@ export async function POST(request: NextRequest) {
       }
     } else {
       writePayload.is_system = false;
+      writePayload.created_at = new Date().toISOString();
+      writePayload.updated_at = new Date().toISOString();
       const { error: insertErr } = await clientForWrite
         .from('podcasts')
         .insert(writePayload);
