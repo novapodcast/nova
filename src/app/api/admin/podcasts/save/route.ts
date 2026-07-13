@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'System podcasts cannot be modified.' }, { status: 403 });
       }
 
+      writePayload.updated_at = new Date().toISOString();
       const { error: updateErr } = await clientForWrite
         .from('podcasts')
         .update(writePayload)
