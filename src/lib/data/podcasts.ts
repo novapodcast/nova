@@ -1,40 +1,54 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
-import {
-  PODCAST_BASE_COLUMNS,
-  selectPublicPodcasts as baseSelectPublicPodcasts,
-  selectAdminPodcasts as baseSelectAdminPodcasts,
-  selectPodcasts as baseSelectPodcasts,
-  fetchPublicPodcastById as baseFetchPublicPodcastById,
-  fetchFeaturedPublicPodcasts as baseFetchFeaturedPublicPodcasts,
-  fetchAllPublicPodcasts as baseFetchAllPublicPodcasts,
-  type PodcastQueryOptions,
-} from '../../../../shared/podcasts';
 
 type Client = SupabaseClient<any, 'public', any>;
 
-export { PODCAST_BASE_COLUMNS };
+export const PODCAST_BASE_COLUMNS = 'id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, category_id, is_active, total_episodes, total_listeners, created_at, updated_at, is_system';
+
+export type PodcastQueryOptions = {
+  includeSystem?: boolean;
+  includeInactive?: boolean;
+  columns?: string;
+};
+
+function createQuery(
+  client: Client,
+  { includeSystem = false, includeInactive = false, columns = PODCAST_BASE_COLUMNS }: PodcastQueryOptions = {}
+) {
+  let query = client.from('podcasts').select(columns);
+  if (!includeSystem) {
+    query = query.eq('is_system', false);
+  }
+  if (!includeInactive) {
+    query = query.eq('is_active', true);
+  }
+  return query;
+}
 
 export function selectPublicPodcasts(client: Client = supabase, columns?: string) {
-  return baseSelectPublicPodcasts(client, columns);
+  return createQuery(client, { includeSystem: false, includeInactive: false, columns });
 }
 
 export function selectAdminPodcasts(client: Client = supabase, options: PodcastQueryOptions = {}) {
-  return baseSelectAdminPodcasts(client, options);
+  return createQuery(client, {
+    includeSystem: options.includeSystem ?? true,
+    includeInactive: options.includeInactive ?? true,
+    columns: options.columns,
+  });
 }
 
 export function selectPodcasts(client: Client = supabase, options?: PodcastQueryOptions) {
-  return baseSelectPodcasts(client, options);
+  return createQuery(client, options);
 }
 
 export function fetchPublicPodcastById(id: string, client: Client = supabase, columns?: string) {
-  return baseFetchPublicPodcastById(client, id, columns);
+  return selectPublicPodcasts(client, columns).eq('id', id).single();
 }
 
 export function fetchFeaturedPublicPodcasts(limit: number, client: Client = supabase, columns?: string) {
-  return baseFetchFeaturedPublicPodcasts(client, limit, columns);
+  return selectPublicPodcasts(client, columns).order('total_listeners', { ascending: false }).limit(limit);
 }
 
 export function fetchAllPublicPodcasts(client: Client = supabase, columns?: string) {
-  return baseFetchAllPublicPodcasts(client, columns);
+  return selectPublicPodcasts(client, columns).order('total_listeners', { ascending: false });
 }

@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
 import NewsletterSignup from '../components/NewsletterSignup';
 import HeroCarousel, { CarouselSlide } from '../components/HeroCarousel';
+import { fetchFeaturedPublicPodcasts } from '@/lib/data/podcasts';
 import { supabase } from '@/lib/supabaseClient';
 
 interface Podcast {
@@ -19,7 +20,6 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
-  is_system: boolean | null;
 }
 
 export default function HomePage() {
@@ -29,14 +29,8 @@ export default function HomePage() {
 
   useEffect(() => {
     async function loadFeatured() {
-      const { data } = await supabase
-        .from('podcasts')
-        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners, is_system')
-        .eq('is_active', true)
-        .eq('is_system', false)
-        .order('total_listeners', { ascending: false })
-        .limit(8);
-      if (data) setFeaturedPodcasts(data);
+      const { data } = await fetchFeaturedPublicPodcasts(8);
+      if (data) setFeaturedPodcasts(data as unknown as Podcast[]);
     }
     async function loadSlides() {
       const { data } = await supabase

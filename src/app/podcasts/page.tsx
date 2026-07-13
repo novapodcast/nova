@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
+import { fetchAllPublicPodcasts } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Podcast {
@@ -15,7 +15,6 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
-  is_system: boolean | null;
 }
 
 export default function PodcastsPage() {
@@ -26,14 +25,9 @@ export default function PodcastsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data, error } = await supabase
-        .from('podcasts')
-        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners, is_system')
-        .eq('is_active', true)
-        .eq('is_system', false)
-        .order('total_listeners', { ascending: false });
+      const { data, error } = await fetchAllPublicPodcasts();
       if (!error && data) {
-        setPodcasts(data as Podcast[]);
+        setPodcasts(data as unknown as Podcast[]);
       }
       setLoading(false);
     };
@@ -41,7 +35,6 @@ export default function PodcastsPage() {
   }, []);
 
   const visiblePodcasts = podcasts.filter((p) => {
-    if (p.is_system) return false;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (

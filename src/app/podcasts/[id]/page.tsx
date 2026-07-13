@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { fetchPublicPodcastById } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Podcast {
@@ -15,7 +16,6 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
-  is_system: boolean | null;
 }
 
 interface Episode {
@@ -41,18 +41,14 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     const load = async () => {
-      const { data: pod, error: podError } = await supabase
-        .from('podcasts')
-        .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, total_episodes, total_listeners, is_system')
-        .eq('id', params.id)
-        .single();
+      const { data: pod, error: podError } = await fetchPublicPodcastById(params.id);
 
-      if (podError || !pod || pod.is_system) {
+      if (podError || !pod) {
         setError(true);
         setLoading(false);
         return;
       }
-      setPodcast(pod as Podcast);
+      setPodcast(pod as unknown as Podcast);
 
       const { data: eps } = await supabase
         .from('episodes')
