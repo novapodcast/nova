@@ -135,12 +135,18 @@ export async function POST(request: NextRequest) {
       writePayload.is_system = false;
       writePayload.created_at = new Date().toISOString();
       writePayload.updated_at = new Date().toISOString();
-      const { error: insertErr } = await clientForWrite
+      const { data: insertData, error: insertErr } = await clientForWrite
         .from('podcasts')
-        .insert(writePayload);
+        .insert(writePayload)
+        .select('id');
 
       if (insertErr) {
         return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+      if (!insertData || insertData.length === 0) {
+        return NextResponse.json({ 
+          error: 'Insert was blocked by RLS. Check that SUPABASE_SERVICE_ROLE_KEY is set and podcasts RLS policies are in place.' 
+        }, { status: 403 });
       }
     }
 
