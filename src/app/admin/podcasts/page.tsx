@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -7,6 +7,35 @@ import { selectAdminPodcasts } from '@/lib/data/podcasts';
 import { useAdminGuard } from '@/lib/useAdminGuard';
 import { uploadEpisodeCover } from '@/lib/upload';
 import { useLanguage } from '@/contexts/LanguageContext';
+
+const LANGUAGE_CONFIGS = [
+  { code: 'en', label: 'English', titleKey: 'title_en', descriptionKey: 'description_en' },
+  { code: 'rw', label: 'Kinyarwanda', titleKey: 'title_rw', descriptionKey: 'description_rw' },
+] as const;
+
+type LanguageCode = (typeof LANGUAGE_CONFIGS)[number]['code'];
+
+type PodcastFormState = {
+  title_en: string;
+  title_rw: string;
+  description_en: string;
+  description_rw: string;
+  cover_image_url: string;
+  category_id: string;
+  speaker_name: string;
+  is_active: boolean;
+};
+
+const INITIAL_FORM_STATE: PodcastFormState = {
+  title_en: '',
+  title_rw: '',
+  description_en: '',
+  description_rw: '',
+  cover_image_url: '',
+  category_id: '',
+  speaker_name: '',
+  is_active: true,
+};
 
 type Podcast = {
   id: string;
@@ -44,16 +73,30 @@ export default function AdminPodcastsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [useCoverUrl, setUseCoverUrl] = useState(false);
-  const [formData, setFormData] = useState({
-    title_en: '',
-    title_rw: '',
-    description_en: '',
-    description_rw: '',
-    cover_image_url: '',
-    category_id: '' as string,
-    speaker_name: '',
-    is_active: true,
-  });
+  const [formData, setFormData] = useState<PodcastFormState>(INITIAL_FORM_STATE);
+  const [activeLanguage, setActiveLanguage] = useState<LanguageCode>('en');
+
+  const languageStatuses = useMemo(() => {
+    return LANGUAGE_CONFIGS.map((config) => {
+      const titleValue = formData[config.titleKey];
+      const descriptionValue = formData[config.descriptionKey];
+      return {
+        ...config,
+        hasTitle: Boolean(titleValue?.trim()),
+        hasDescription: Boolean(descriptionValue?.trim()),
+      };
+    });
+  }, [formData]);
+
+  const activeLanguageConfig = useMemo(() => {
+    return LANGUAGE_CONFIGS.find((config) => config.code === activeLanguage) ?? LANGUAGE_CONFIGS[0];
+  }, [activeLanguage]);
+
+  useEffect(() => {
+    if (!editingId && showNewForm) {
+      setActiveLanguage(language === 'rw' ? 'rw' : 'en');
+    }
+  }, [language, editingId, showNewForm]);
 
   useEffect(() => {
     if (!authorized) return;
@@ -108,21 +151,24 @@ export default function AdminPodcastsPage() {
       speaker_name: p.speaker_name,
       is_active: p.is_active,
     });
+    const preferred = language === 'rw' ? 'rw' : 'en';
+    const preferredTitle = p[`title_${preferred}` as const];
+    if (preferredTitle?.trim()) {
+      setActiveLanguage(preferred);
+    } else if (p.title_en?.trim()) {
+      setActiveLanguage('en');
+    } else if (p.title_rw?.trim()) {
+      setActiveLanguage('rw');
+    } else {
+      setActiveLanguage(preferred);
+    }
     setShowNewForm(false);
   }
 
   function startNew() {
     setEditingId(null);
-    setFormData({
-      title_en: '',
-      title_rw: '',
-      description_en: '',
-      description_rw: '',
-      cover_image_url: '',
-      category_id: '',
-      speaker_name: '',
-      is_active: true,
-    });
+    setFormData(INITIAL_FORM_STATE);
+    setActiveLanguage(language === 'rw' ? 'rw' : 'en');
     setShowNewForm(true);
   }
 
@@ -145,14 +191,25 @@ export default function AdminPodcastsPage() {
   }
 
   async function handleSave() {
-    // Frontend validation: require at least one title
-    if (!formData.title_en?.trim() && !formData.title_rw?.trim()) {
-      alert('Please provide at least one title (English or Kinyarwanda)');
+    const incompleteLanguages = languageStatuses.filter((status) => !status.hasTitle);
+    if (incompleteLanguages.length === LANGUAGE_CONFIGS.length) {
+      alert('Add a title in English or Kinyarwanda to continue.');
+      setActiveLanguage(incompleteLanguages[0]?.code ?? 'en');
       return;
+    }
+    if (incompleteLanguages.length > 0) {
+      setActiveLanguage(incompleteLanguages[0].code);
+    }
+    if (!formData[activeLanguageConfig.titleKey]?.trim()) {
+      const nextLanguageWithTitle = languageStatuses.find((lang) => lang.hasTitle);
+      if (nextLanguageWithTitle) {
+        setActiveLanguage(nextLanguageWithTitle.code);
+      }
     }
 
     setSaving(true);
     try {
+
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) {
@@ -190,6 +247,7 @@ export default function AdminPodcastsPage() {
       await fetchPodcasts();
       setEditingId(null);
       setShowNewForm(false);
+      setActiveLanguage('en');
     } finally {
       setSaving(false);
     }
@@ -276,63 +334,77 @@ export default function AdminPodcastsPage() {
           </p>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Podcast Language</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, title_en: formData.title_en })}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-white/10 text-white"
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, title_rw: formData.title_rw })}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-white/10 text-white"
-                >
-                  Kinyarwanda
-                </button>
+              <label className="block text-sm font-medium mb-2">Content Language</label>
+              <div className="flex flex-wrap gap-2">
+                {languageStatuses.map((lang) => {
+                  const isActive = activeLanguage === lang.code;
+                  const hasTitle = lang.hasTitle;
+                  return (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={() => setActiveLanguage(lang.code)}
+                      className={`group flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                        isActive ? 'bg-primary text-black border-primary shadow-[0_0_15px_rgba(34,197,94,0.45)]' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      <span>{lang.label}</span>
+                      <span className={`text-xs font-medium ${hasTitle ? 'text-emerald-700 group-[.bg-primary]:text-emerald-800' : 'text-amber-400'}`}>
+                        {hasTitle ? '✓' : '⚠'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              <p className="text-xs text-muted mt-1">Fill in both languages for bilingual content.</p>
+              <div className="mt-3 rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-muted">
+                <p className="mb-1 font-semibold text-white/80">Translation progress</p>
+                <div className="space-y-1">
+                  {languageStatuses.map((lang) => {
+                    const statusText = lang.hasTitle
+                      ? (lang.hasDescription ? 'Complete' : 'Title ready · description optional')
+                      : 'Title missing';
+                    return (
+                      <div key={lang.code} className="flex items-center gap-2">
+                        <span className={`inline-flex h-2.5 w-2.5 rounded-full ${lang.hasTitle ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+                        <span className="font-medium text-white/70">{lang.label}</span>
+                        <span className={lang.hasTitle ? 'text-emerald-300' : 'text-amber-300'}>{statusText}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Title (EN)</label>
+                <label className="block text-sm font-medium mb-1">Title</label>
                 <input
                   type="text"
-                  value={formData.title_en}
-                  onChange={(e) => setFormData({ ...formData, title_en: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={formData[activeLanguageConfig.titleKey]}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      [activeLanguageConfig.titleKey]: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder={`Enter the ${activeLanguageConfig.label.toLowerCase()} title`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Title (RW)</label>
-                <input
-                  type="text"
-                  value={formData.title_rw}
-                  onChange={(e) => setFormData({ ...formData, title_rw: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Description (EN)</label>
+                <label className="block text-sm font-medium mb-1">Description</label>
                 <textarea
-                  value={formData.description_en}
-                  onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
+                  value={formData[activeLanguageConfig.descriptionKey]}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      [activeLanguageConfig.descriptionKey]: e.target.value,
+                    }))
+                  }
                   rows={3}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder={`Describe the show in ${activeLanguageConfig.label}`}
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Description (RW)</label>
-                <textarea
-                  value={formData.description_rw}
-                  onChange={(e) => setFormData({ ...formData, description_rw: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                <p className="mt-1 text-xs text-muted">Descriptions help listeners understand the show. Title is required; description is optional.</p>
               </div>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
