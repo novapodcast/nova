@@ -50,6 +50,15 @@ type Podcast = {
   total_episodes: number;
   total_listeners: number;
   is_system: boolean;
+  updated_at: string;
+  created_at: string;
+};
+
+type EpisodeStats = {
+  podcast_id: string;
+  latest_episode_date: string | null;
+  draft_count: number;
+  published_count: number;
 };
 
 type Category = {
@@ -68,6 +77,7 @@ export default function AdminPodcastsPage() {
   const [loading, setLoading] = useState(true);
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [episodeStats, setEpisodeStats] = useState<Map<string, EpisodeStats>>(new Map());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -123,7 +133,43 @@ export default function AdminPodcastsPage() {
       if (list.length === 0) {
         startNew();
       }
+      // Fetch episode stats for each podcast
+      fetchEpisodeStats(list.map(p => p.id));
     }
+  }
+
+  async function fetchEpisodeStats(podcastIds: string[]) {
+    if (podcastIds.length === 0) return;
+    
+    const { data, error } = await supabase
+      .from('episodes')
+      .select('podcast_id, published_at, is_active')
+      .in('podcast_id', podcastIds);
+    
+    if (error) {
+      console.error('fetchEpisodeStats error:', error);
+      return;
+    }
+
+    const statsMap = new Map<string, EpisodeStats>();
+    
+    podcastIds.forEach(podcastId => {
+      const podcastEpisodes = data?.filter(ep => ep.podcast_id === podcastId) || [];
+      const publishedEpisodes = podcastEpisodes.filter(ep => ep.is_active && ep.published_at);
+      const draftEpisodes = podcastEpisodes.filter(ep => !ep.is_active || !ep.published_at);
+      
+      const latestEpisode = publishedEpisodes
+        .sort((a, b) => new Date(b.published_at!).getTime() - new Date(a.published_at!).getTime())[0];
+      
+      statsMap.set(podcastId, {
+        podcast_id: podcastId,
+        latest_episode_date: latestEpisode?.published_at || null,
+        draft_count: draftEpisodes.length,
+        published_count: publishedEpisodes.length,
+      });
+    });
+    
+    setEpisodeStats(statsMap);
   }
 
   async function fetchCategories() {
@@ -499,51 +545,112 @@ export default function AdminPodcastsPage() {
       )}
 
       <div className="space-y-4">
-        {regularPodcasts.map((p) => (
-          <div key={p.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 flex items-start gap-4">
+        {regularPodcasts.map((p) => {
+          const stats = episodeStats.get(p.id);
+          const formatTimeAgo = (dateStr: string | null) => {
+            if (!dateStr) return null;
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return language === 'rw' ? 'Uyu munsi' : 'Today';
+            if (diffDays === 1) return language === 'rw' ? 'Ejo' : 'Yesterday';
+            if (diffDays < 7) return language === 'rw' ? `Hashize iminsi ${diffDays}` : `${diffDays} days ago`;
+            if (diffDays < 30) {
+              const weeks = Math.floor(diffDays / 7);
+              return language === 'rw' ? `Hashize icyumweru ${weeks}` : `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+            }
+            if (diffDays < 365) {
+              const months = Math.floor(diffDays / 30);
+              return language === 'rw' ? `Hashize ukwezi ${months}` : `${months} month${months > 1 ? 's' : ''} ago`;
+            }
+            const years = Math.floor(diffDays / 365);
+            return language === 'rw' ? `Hashize umwaka ${years}` : `${years} year${years > 1 ? 's' : ''} ago`;
+          };
+
+          return (
+            <div key={p.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
+              <div className="flex items-start gap-6">
+                {/* Podcast Cover */}
                 {p.cover_image_url && (
-                  <img src={p.cover_image_url} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                  <img src={p.cover_image_url} alt="" className="w-24 h-24 rounded-xl object-cover flex-shrink-0 ring-1 ring-white/10" />
                 )}
-                <div>
-                  <h3 className="text-lg font-semibold">
+                
+                {/* Main Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold mb-1">
                     {language === 'rw' ? p.title_rw : p.title_en}
                   </h3>
-                  <p className="text-sm text-muted mb-2">
-                    {language === 'rw' ? p.description_rw : p.description_en || 'No description'}
-                  </p>
-                  <div className="flex gap-4 text-xs text-muted">
-                    <span>{p.total_episodes} episode{p.total_episodes !== 1 ? 's' : ''}</span>
-                    <span>{p.speaker_name}</span>
-                    <span>{p.is_active ? '✓ Active' : 'Inactive'}</span>
+                  {p.speaker_name && (
+                    <p className="text-sm text-primary font-medium mb-3">{p.speaker_name}</p>
+                  )}
+                  
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <div className="text-2xl font-bold text-white">{p.total_episodes}</div>
+                      <div className="text-xs text-muted">{language === 'rw' ? 'Ibice' : 'Episodes'}</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-white">{p.total_listeners.toLocaleString()}</div>
+                      <div className="text-xs text-muted">{language === 'rw' ? 'Abumva' : 'Plays'}</div>
+                    </div>
+                    {stats?.latest_episode_date && (
+                      <div>
+                        <div className="text-sm font-semibold text-white">
+                          {new Date(stats.latest_episode_date).toLocaleDateString(language === 'rw' ? 'en-GB' : 'en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                        <div className="text-xs text-muted">{language === 'rw' ? 'Igice cya nyuma' : 'Last episode'}</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-sm font-semibold text-white">
+                        {formatTimeAgo(p.updated_at) || 'Recently'}
+                      </div>
+                      <div className="text-xs text-muted">{language === 'rw' ? 'Byavuguruwe' : 'Last updated'}</div>
+                    </div>
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 text-xs rounded-full ${p.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                      {p.is_active ? (language === 'rw' ? 'Irakora' : 'Active') : (language === 'rw' ? 'Ntiyakora' : 'Inactive')}
+                    </span>
+                    {stats && stats.draft_count > 0 && (
+                      <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">
+                        {stats.draft_count} {language === 'rw' ? 'draft' : 'draft'}{stats.draft_count !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <Link
-                  href={`/admin/content?podcast=${p.id}`}
-                  className="px-4 py-2 text-sm bg-primary text-black font-semibold rounded-lg hover:bg-primary/90 transition flex items-center gap-2"
-                >
-                  📝 Manage Episodes
-                </Link>
-                <button
-                  onClick={() => startEdit(p)}
-                  className="px-3 py-1 text-sm bg-white/10 text-white rounded hover:bg-white/20 transition"
-                >
-                  Edit Show
-                </button>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  disabled={saving}
-                  className="px-3 py-1 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition disabled:opacity-50"
-                >
-                  Delete
-                </button>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 flex-shrink-0">
+                  <Link
+                    href={`/admin/content?podcast=${p.id}`}
+                    className="px-4 py-2 text-sm bg-primary text-black font-semibold rounded-lg hover:bg-primary/90 transition text-center whitespace-nowrap"
+                  >
+                    {language === 'rw' ? 'Gucunga Ibice' : 'Manage Episodes'}
+                  </Link>
+                  <button
+                    onClick={() => startEdit(p)}
+                    className="px-4 py-2 text-sm bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+                  >
+                    {language === 'rw' ? 'Hindura' : 'Edit Podcast'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 transition disabled:opacity-50"
+                  >
+                    {language === 'rw' ? 'Siba' : 'Delete'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {regularPodcasts.length === 0 && !showNewForm && (
