@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function isAdminEmailServer(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const raw = process.env.ADMIN_EMAILS || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '';
-  const defaults = ['admin@nova.co.rw', 'novapodcast2019@gmail.com'];
-  const list = Array.from(new Set([...(raw ? raw.split(',') : []), ...defaults]))
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return list.includes(email.toLowerCase());
-}
+import { verifyAdmin, getAdminClient } from '@/lib/auth/admin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,53 +10,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: 'Supabase env not configured' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
-
-    const admin = serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    }) : null;
-
-    const { data: userRes, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userRes?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    let isAdmin = false;
-    if (admin) {
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    } else {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    }
-
-    if (!isAdmin && userRes.user.email) {
-      isAdmin = isAdminEmailServer(userRes.user.email);
-    }
-
+    const { isAdmin, adminClient, userClient } = await verifyAdmin(token);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const clientForRead = admin ?? supabase;
+    const clientForRead = getAdminClient(adminClient, userClient);
 
     // Parse date filters (fallback to last 30 days)
     const { searchParams } = new URL(request.url);
@@ -77,40 +26,104 @@ export async function GET(request: NextRequest) {
     const startISO = startAt.toISOString();
     const endISO = endAt.toISOString();
 
-    const { count: totalUsers } = await clientForRead
+    // Fetch all metrics with error handling
+    const { count: totalUsers, error: usersError } = await clientForRead
       .from('profiles')
       .select('*', { count: 'exact', head: true });
+    
+    if (usersError) {
+      console.error('Error fetching total users:', usersError);
+    }
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { count: recentSignups } = await clientForRead
+    const { count: recentSignups, error: signupsError } = await clientForRead
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', weekAgo)
       .lte('created_at', endISO);
+    
+    if (signupsError) {
+      console.error('Error fetching recent signups:', signupsError);
+    }
 
-    const { count: activeSubscriptions } = await clientForRead
+    const { count: activeSubscriptions, error: subsError } = await clientForRead
       .from('user_subscriptions')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
-      .gte('created_at', startISO)
-      .lte('created_at', endISO);
+      .eq('status', 'active');
+    
+    if (subsError) {
+      console.error('Error fetching active subscriptions:', subsError);
+    }
 
-    const { data: payments } = await clientForRead
+    const { data: payments, error: paymentsError } = await clientForRead
       .from('payments')
       .select('amount, currency, status, created_at, user_id')
       .eq('status', 'succeeded')
       .gte('created_at', startISO)
       .lte('created_at', endISO);
-    const totalRevenue = payments?.reduce((sum, p) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
+    
+    if (paymentsError) {
+      console.error('Error fetching payments:', paymentsError);
+    }
+    
+    const totalRevenue = payments?.reduce((sum: number, p: any) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
 
-    const { count: totalEpisodes } = await clientForRead
-      .from('episodes')
-      .select('*', { count: 'exact', head: true });
-
-    const { count: premiumEpisodes } = await clientForRead
+    const { count: totalEpisodes, error: episodesError } = await clientForRead
       .from('episodes')
       .select('*', { count: 'exact', head: true })
-      .eq('is_premium', true);
+      .eq('status', 'published');
+    
+    if (episodesError) {
+      console.error('Error fetching total episodes:', episodesError);
+    }
+
+    // Count premium episodes (episodes with access_tier_id that has rank > 0)
+    const { data: premiumEpisodesData, error: premiumError } = await clientForRead
+      .from('episodes')
+      .select('id, access_tier_id, podcast:podcasts!inner(access_tier_id)')
+      .eq('status', 'published')
+      .not('access_tier_id', 'is', null);
+    
+    if (premiumError) {
+      console.error('Error fetching premium episodes:', premiumError);
+    }
+    
+    // Also count episodes that inherit premium access from podcast
+    const { data: inheritedPremiumData, error: inheritedError } = await clientForRead
+      .from('episodes')
+      .select('id, access_tier_id, podcast:podcasts!inner(access_tier_id)')
+      .eq('status', 'published')
+      .is('access_tier_id', null);
+    
+    if (inheritedError) {
+      console.error('Error fetching inherited premium episodes:', inheritedError);
+    }
+    
+    // Get all tier IDs to check ranks
+    const allTierIds = new Set<string>();
+    premiumEpisodesData?.forEach((ep: any) => {
+      if (ep.access_tier_id) allTierIds.add(ep.access_tier_id);
+    });
+    inheritedPremiumData?.forEach((ep: any) => {
+      if (ep.podcast?.access_tier_id) allTierIds.add(ep.podcast.access_tier_id);
+    });
+    
+    const { data: tiersForCount } = await clientForRead
+      .from('pricing_tiers')
+      .select('id, rank')
+      .in('id', Array.from(allTierIds));
+    
+    const tierRankMap = new Map<string, number>((tiersForCount || []).map((t: any) => [t.id, t.rank as number]));
+    
+    let premiumEpisodes = 0;
+    premiumEpisodesData?.forEach((ep: any) => {
+      const rank = tierRankMap.get(ep.access_tier_id);
+      if (rank !== undefined && rank > 0) premiumEpisodes++;
+    });
+    inheritedPremiumData?.forEach((ep: any) => {
+      const rank = tierRankMap.get(ep.podcast?.access_tier_id);
+      if (rank !== undefined && rank > 0) premiumEpisodes++;
+    });
 
     // Revenue by plan: map each payment to the user's subscription plan
     const payingUserIds = Array.from(new Set(payments?.map((p: any) => p.user_id).filter(Boolean) || []));
@@ -123,26 +136,30 @@ export async function GET(request: NextRequest) {
       .from('pricing_tiers')
       .select('id, display_name_en, plan_name')
       .in('id', planIds.length ? planIds : ['no-plans']);
-    const tierNames = new Map((tiers || []).map((t: any) => [t.id, t.display_name_en || t.plan_name || 'Unknown']));
-    const userPlan = new Map((subsWithPlan || []).map((s: any) => [s.user_id, tierNames.get(s.plan_id) || 'Unknown']));
+    const tierNames = new Map<string, string>((tiers || []).map((t: any) => [t.id, t.display_name_en || t.plan_name || 'Unknown']));
+    const userPlan = new Map<string, string>((subsWithPlan || []).map((s: any) => [s.user_id, tierNames.get(s.plan_id) || 'Unknown']));
 
     const revenueByPlan: Record<string, { revenue: number; count: number }> = {};
     payments?.forEach((p: any) => {
-      const plan = userPlan.get(p.user_id) || 'Unknown';
+      const plan: string = userPlan.get(p.user_id) || 'Unknown';
       if (!revenueByPlan[plan]) {
         revenueByPlan[plan] = { revenue: 0, count: 0 };
       }
-      revenueByPlan[plan].revenue += p.currency === 'RWF' ? p.amount || 0 : 0;
-      revenueByPlan[plan].count++;
+      revenueByPlan[plan]!.revenue += p.currency === 'RWF' ? p.amount || 0 : 0;
+      revenueByPlan[plan]!.count++;
     });
 
-    const { data: favoritesData } = await clientForRead
+    const { data: favoritesData, error: favError } = await clientForRead
       .from('favorites')
-      .select('episode_id, episodes(title)');
+      .select('episode_id, episodes(title_en, title_rw)');
+    
+    if (favError) {
+      console.error('Error fetching favorites:', favError);
+    }
 
     const episodeFavCounts: Record<string, { title: string; count: number }> = {};
     favoritesData?.forEach((fav: any) => {
-      const title = fav.episodes?.title || 'Unknown';
+      const title = fav.episodes?.title_en || fav.episodes?.title_rw || 'Unknown';
       if (!episodeFavCounts[fav.episode_id]) {
         episodeFavCounts[fav.episode_id] = { title, count: 0 };
       }

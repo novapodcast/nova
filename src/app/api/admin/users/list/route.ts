@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function isAdminEmailServer(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const raw = process.env.ADMIN_EMAILS || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '';
-  const defaults = ['admin@nova.co.rw', 'novapodcast2019@gmail.com'];
-  const list = Array.from(new Set([...(raw ? raw.split(',') : []), ...defaults]))
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return list.includes(email.toLowerCase());
-}
+import { verifyAdmin, getAdminClient } from '@/lib/auth/admin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,53 +10,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: 'Supabase env not configured' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
-
-    const admin = serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    }) : null;
-
-    const { data: userRes, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userRes?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    let isAdmin = false;
-    if (admin) {
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    } else {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    }
-
-    if (!isAdmin && userRes.user.email) {
-      isAdmin = isAdminEmailServer(userRes.user.email);
-    }
-
+    const { isAdmin, adminClient, userClient } = await verifyAdmin(token);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const clientForRead = admin ?? supabase;
+    const clientForRead = getAdminClient(adminClient, userClient);
 
     const { data: profiles } = await clientForRead
       .from('profiles')
@@ -78,14 +27,14 @@ export async function GET(request: NextRequest) {
       .select('user_id, status, pricing_tiers(display_name_en)')
       .eq('status', 'active');
 
-    const subMap = new Map(
+    const subMap = new Map<string, { status: string | null; plan_name: string | null }>(
       subscriptions?.map((s: any) => [
         s.user_id,
-        { status: s.status, plan_name: s.pricing_tiers?.display_name_en },
+        { status: s.status, plan_name: s.pricing_tiers?.display_name_en ?? null },
       ]) || []
     );
 
-    const users = profiles?.map((p) => ({
+    const users = profiles?.map((p: { id: string; email: string; full_name: string | null; is_admin: boolean; created_at: string }) => ({
       ...p,
       subscription_status: subMap.get(p.id)?.status || null,
       plan_name: subMap.get(p.id)?.plan_name || null,

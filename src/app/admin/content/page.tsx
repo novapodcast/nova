@@ -34,6 +34,7 @@ type Episode = {
   duration_seconds: number | null;
   published_at: string | null;
   is_premium: boolean;
+  access_tier_id: string | null;
   language: 'en' | 'rw';
   podcast_id: string | null;
   status: string;
@@ -59,6 +60,7 @@ export default function AdminContentPage() {
   const [selectedPodcastId, setSelectedPodcastId] = useState<string | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [predefinedCategories, setPredefinedCategories] = useState<Category[]>([]);
+  const [pricingTiers, setPricingTiers] = useState<{id: string; plan_name: string; display_name_en: string; rank: number}[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title_en: '',
@@ -77,6 +79,7 @@ export default function AdminContentPage() {
     cover_image_url: '',
     duration_seconds: 0,
     is_premium: false,
+    access_tier_id: '' as string,
     language: 'rw' as 'en' | 'rw',
     categories: [] as string[],
   });
@@ -88,6 +91,9 @@ export default function AdminContentPage() {
   const [useAudioUrl, setUseAudioUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [customCategoryInput, setCustomCategoryInput] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string>('');
 
   useEffect(() => {
     if (authorized) {
@@ -96,6 +102,7 @@ export default function AdminContentPage() {
         if (podcastParam) setSelectedPodcastId(podcastParam);
       });
       fetchCategories();
+      fetchPricingTiers();
       setLoading(false);
     }
   }, [authorized, searchParams]);
@@ -123,6 +130,15 @@ export default function AdminContentPage() {
       .order('created_at', { ascending: false });
     if (error) console.error('fetchEpisodes error:', error);
     if (!error && data) setEpisodes(data as Episode[]);
+  }
+
+  async function fetchPricingTiers() {
+    const { data, error } = await supabase
+      .from('pricing_tiers')
+      .select('id, plan_name, display_name_en, rank')
+      .eq('is_active', true)
+      .order('rank', { ascending: true });
+    if (!error && data) setPricingTiers(data);
   }
 
   async function fetchCategories() {
@@ -157,6 +173,7 @@ export default function AdminContentPage() {
       cover_image_url: ep.cover_image_url || '',
       duration_seconds: ep.duration_seconds ?? 0,
       is_premium: ep.is_premium,
+      access_tier_id: ep.access_tier_id || '',
       language: ep.language || 'rw',
       categories: ep.categories || [],
     });
@@ -182,6 +199,7 @@ export default function AdminContentPage() {
       cover_image_url: '',
       duration_seconds: 0,
       is_premium: false,
+      access_tier_id: '',
       language: 'rw',
       categories: [],
     });
@@ -364,8 +382,65 @@ export default function AdminContentPage() {
     const d1 = (ep.description_en || '').toLowerCase();
     const d2 = (ep.description_rw || '').toLowerCase();
     const q = searchQuery.toLowerCase();
-    return t1.includes(q) || t2.includes(q) || d1.includes(q) || d2.includes(q);
+    const matchesSearch = t1.includes(q) || t2.includes(q) || d1.includes(q) || d2.includes(q);
+    const matchesStatus = statusFilter === 'all' || ep.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
+
+  const toggleEpisodeSelection = (id: string) => {
+    setSelectedEpisodeIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEpisodeIds.size === filteredEpisodes.length) {
+      setSelectedEpisodeIds(new Set());
+    } else {
+      setSelectedEpisodeIds(new Set(filteredEpisodes.map(ep => ep.id)));
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedEpisodeIds.size === 0) return;
+    const ids = Array.from(selectedEpisodeIds);
+    const actionLabel = bulkAction === 'publish' ? 'publish' : bulkAction === 'archive' ? 'archive' : bulkAction === 'delete' ? 'delete' : '';
+    if (!confirm(`Are you sure you want to ${actionLabel} ${ids.length} episode(s)?`)) return;
+
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Not authenticated'); return; }
+
+      if (bulkAction === 'delete') {
+        for (const id of ids) {
+          await fetch('/api/admin/content/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ id }),
+          });
+        }
+      } else {
+        for (const id of ids) {
+          await fetch('/api/admin/content/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ id, status: bulkAction, podcast_id: selectedPodcastId }),
+          });
+        }
+      }
+
+      if (selectedPodcastId) await fetchEpisodes(selectedPodcastId);
+      setSelectedEpisodeIds(new Set());
+      setBulkAction('');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="container py-12 md:py-16">
@@ -495,14 +570,60 @@ export default function AdminContentPage() {
       )}
 
       {selectedPodcastId && (
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="🔍 Search episodes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
-          />
+        <div className="mb-6 space-y-3">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="🔍 Search episodes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary outline-none transition"
+            >
+              <option value="all">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+
+          {selectedEpisodeIds.size > 0 && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+              <span className="text-sm text-primary font-medium">
+                {selectedEpisodeIds.size} selected
+              </span>
+              <select
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+                className="px-3 py-1.5 rounded-lg bg-black/30 border border-white/10 text-white text-sm"
+              >
+                <option value="">Choose action…</option>
+                <option value="publish">Publish</option>
+                <option value="archive">Archive</option>
+                <option value="delete">Delete</option>
+              </select>
+              {bulkAction && (
+                <button
+                  onClick={handleBulkAction}
+                  disabled={saving}
+                  className="px-4 py-1.5 bg-primary text-black text-sm font-semibold rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                >
+                  Apply
+                </button>
+              )}
+              <button
+                onClick={() => { setSelectedEpisodeIds(new Set()); setBulkAction(''); }}
+                className="text-sm text-muted hover:text-white transition ml-auto"
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -599,6 +720,7 @@ export default function AdminContentPage() {
                   <option value="draft">Draft</option>
                   <option value="scheduled">Scheduled</option>
                   <option value="published">Published</option>
+                  <option value="archived">Archived</option>
                 </select>
               </div>
               {formData.status === 'scheduled' && (
@@ -856,15 +978,39 @@ export default function AdminContentPage() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_premium"
-                checked={formData.is_premium}
-                onChange={(e) => setFormData({ ...formData, is_premium: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <label htmlFor="is_premium" className="text-sm font-medium">Premium Episode</label>
+            <div className="border-t border-white/10 pt-4">
+              <h3 className="text-sm font-semibold mb-3">Access Plan</h3>
+              <div className="flex items-center gap-3">
+                <select
+                  value={formData.access_tier_id}
+                  onChange={(e) => setFormData({ ...formData, access_tier_id: e.target.value })}
+                  className="flex-1 px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Inherit from Podcast</option>
+                  {pricingTiers.map((tier) => (
+                    <option key={tier.id} value={tier.id}>
+                      {tier.display_name_en} (Rank {tier.rank})
+                    </option>
+                  ))}
+                </select>
+                {formData.access_tier_id === '' && (
+                  <span className="text-xs text-muted whitespace-nowrap">
+                    Episodes inherit the podcast's access plan by default.
+                  </span>
+                )}
+                {formData.access_tier_id !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, access_tier_id: '' })}
+                    className="text-xs text-primary hover:underline whitespace-nowrap"
+                  >
+                    Reset to inherit
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-muted mt-2">
+                Override the podcast's access plan for this specific episode only. Leave as "Inherit" to use the podcast's plan.
+              </p>
             </div>
             <div className="flex gap-3">
               <button
@@ -886,10 +1032,34 @@ export default function AdminContentPage() {
       )}
 
       <div className="space-y-4">
+        {filteredEpisodes.length > 0 && (
+          <div className="flex items-center gap-3 px-2">
+            <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedEpisodeIds.size === filteredEpisodes.length && filteredEpisodes.length > 0}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded"
+              />
+              Select All
+            </label>
+            <span className="text-xs text-muted">
+              {filteredEpisodes.length} episode{filteredEpisodes.length !== 1 ? 's' : ''}
+              {statusFilter !== 'all' && ` (${statusFilter})`}
+            </span>
+          </div>
+        )}
         {filteredEpisodes.map((ep) => (
-          <div key={ep.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
+          <div key={ep.id} className={`bg-[var(--surface)] rounded-xl p-6 ring-1 transition ${selectedEpisodeIds.has(ep.id) ? 'ring-primary/30 bg-primary/5' : 'ring-white/5'}`}>
             <div className="flex items-start justify-between">
-              <div className="flex-1">
+              <div className="flex items-start gap-3 flex-1">
+                <input
+                  type="checkbox"
+                  checked={selectedEpisodeIds.has(ep.id)}
+                  onChange={() => toggleEpisodeSelection(ep.id)}
+                  className="w-4 h-4 rounded mt-1.5 flex-shrink-0"
+                />
+                <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`px-2 py-0.5 text-xs font-bold rounded ${ep.language === 'en' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                     {ep.language === 'en' ? 'EN' : 'RW'}
@@ -901,10 +1071,29 @@ export default function AdminContentPage() {
                 <p className="text-sm text-muted mb-2">
                   {ep.description_en || ep.description_rw || 'No description'}
                 </p>
-                <div className="flex gap-4 text-xs text-muted">
+                <div className="flex gap-4 text-xs text-muted flex-wrap">
                   <span>{ep.audio_url ? `${ep.duration_seconds ?? 0}s` : 'No audio'}</span>
-                  <span>{ep.is_premium ? '👑 Premium' : 'Free'}</span>
-                  <span>{ep.published_at ? `Published ${new Date(ep.published_at).toLocaleDateString()}` : 'Draft'}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    ep.status === 'published' ? 'bg-green-500/20 text-green-400' :
+                    ep.status === 'draft' ? 'bg-amber-500/20 text-amber-400' :
+                    ep.status === 'scheduled' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-red-500/20 text-red-400'
+                  }`}>
+                    {ep.status ? ep.status.charAt(0).toUpperCase() + ep.status.slice(1) : 'Draft'}
+                  </span>
+                  {ep.access_tier_id && pricingTiers.find(t => t.id === ep.access_tier_id) ? (
+                    <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                      {pricingTiers.find(t => t.id === ep.access_tier_id)?.display_name_en}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-white/10 text-muted text-xs">
+                      Inherits podcast plan
+                    </span>
+                  )}
+                  {ep.published_at && (
+                    <span>Published {new Date(ep.published_at).toLocaleDateString()}</span>
+                  )}
+                </div>
                 </div>
               </div>
               <div className="flex gap-2">

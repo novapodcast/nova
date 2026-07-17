@@ -22,10 +22,31 @@ interface Podcast {
   total_listeners: number | null;
 }
 
+interface ContinueListeningItem {
+  episode_id: string;
+  position_seconds: number;
+  duration_seconds: number | null;
+  completed: boolean;
+  episodes: {
+    id: string;
+    title_en: string | null;
+    title_rw: string | null;
+    cover_image_url: string | null;
+    podcasts: {
+      id: string;
+      title_en: string | null;
+      title_rw: string | null;
+      cover_image_url: string | null;
+    } | null;
+  } | null;
+}
+
 export default function HomePage() {
   const { language } = useLanguage();
   const [featuredPodcasts, setFeaturedPodcasts] = useState<Podcast[]>([]);
   const [slides, setSlides] = useState<CarouselSlide[]>([]);
+  const [continueItems, setContinueItems] = useState<ContinueListeningItem[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     async function loadFeatured() {
@@ -42,7 +63,23 @@ export default function HomePage() {
     }
     loadFeatured();
     loadSlides();
+    loadContinueListening();
   }, []);
+
+  async function loadContinueListening() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      setIsLoggedIn(true);
+      const res = await fetch('/api/progress?type=continue', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setContinueItems(data.items || []);
+      }
+    } catch {}
+  }
 
   const formatCount = (value: number | null | undefined) => {
     if (!value) return '0';
@@ -53,6 +90,60 @@ export default function HomePage() {
     <div>
       {/* Hero Carousel */}
       <HeroCarousel language={language} slides={slides} />
+
+      {/* Continue Listening (for logged-in users) */}
+      {isLoggedIn && continueItems.length > 0 && (
+        <section className="container py-8 md:py-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold mb-1">
+                {language === 'rw' ? 'Komeza Kumva' : 'Continue Listening'}
+              </h2>
+              <p className="text-sm text-muted">
+                {language === 'rw' ? 'Komeza aho wasize' : 'Pick up where you left off'}
+              </p>
+            </div>
+            <Link href="/library" className="text-sm text-primary hover:underline font-medium">
+              {language === 'rw' ? 'Reba byose' : 'View all'} →
+            </Link>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
+            {continueItems.slice(0, 6).map((item) => {
+              if (!item.episodes) return null;
+              const ep = item.episodes;
+              const pod = ep.podcasts;
+              const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || 'Untitled';
+              const podTitle = pod ? ((language === 'rw' ? pod.title_rw : pod.title_en) || pod.title_en) : '';
+              const cover = ep.cover_image_url || pod?.cover_image_url;
+              const progressPercent = item.duration_seconds
+                ? Math.min(100, (item.position_seconds / item.duration_seconds) * 100)
+                : 0;
+
+              return (
+                <Link
+                  key={item.episode_id}
+                  href={`/episodes/${ep.id}`}
+                  className="flex-shrink-0 w-64 snap-start group"
+                >
+                  <div className="relative h-40 rounded-xl overflow-hidden bg-black/40 ring-1 ring-white/10 group-hover:ring-primary/40 transition">
+                    {cover && (
+                      <Image src={cover} alt="" fill sizes="256px" className="object-cover" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                      <div className="h-1 bg-white/20 rounded-full overflow-hidden mb-2">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${progressPercent}%` }} />
+                      </div>
+                      <p className="text-sm font-medium text-white truncate">{epTitle}</p>
+                      <p className="text-xs text-muted truncate">{podTitle}</p>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Featured Podcasts */}
       <section className="container py-12 md:py-16">

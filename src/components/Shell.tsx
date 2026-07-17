@@ -51,7 +51,7 @@ function Header() {
   return (
     <header className="w-full bg-black/60 backdrop-blur sticky top-0 z-50 border-b border-white/5">
       <div className="container flex items-center justify-between py-4">
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href="/" className="flex items-center gap-2 group" aria-label="Nova home">
           <img src="/favicon.svg" alt="Nova" className="h-7 w-7 transition-transform group-hover:scale-110" />
           <span className="text-xl font-bold text-white tracking-tight">Nova</span>
         </Link>
@@ -66,7 +66,8 @@ function Header() {
         </button>
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
           <Link href="/podcasts" className="hover:text-white">{t('nav.podcasts', language)}</Link>
-          <Link href="/favorites" className="hover:text-white">{language === 'rw' ? 'Ibikunzwe' : 'Favorites'}</Link>
+          <Link href="/search" className="hover:text-white">{language === 'rw' ? 'Shakisha' : 'Search'}</Link>
+          <Link href="/library" className="hover:text-white">{language === 'rw' ? 'Umwugakoro' : 'Library'}</Link>
           <Link href="/pricing" className="hover:text-white">{t('nav.pricing', language)}</Link>
           <Link href="/about" className="hover:text-white">{t('nav.about', language)}</Link>
           <LanguageSwitcher />
@@ -112,8 +113,11 @@ function Header() {
               <Link href="/podcasts" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {t('nav.podcasts', language)}
               </Link>
-              <Link href="/favorites" className="hover:text-white" onClick={() => setMobileOpen(false)}>
-                {language === 'rw' ? 'Ibikunzwe' : 'Favorites'}
+              <Link href="/search" className="hover:text-white" onClick={() => setMobileOpen(false)}>
+                {language === 'rw' ? 'Shakisha' : 'Search'}
+              </Link>
+              <Link href="/library" className="hover:text-white" onClick={() => setMobileOpen(false)}>
+                {language === 'rw' ? 'Umwugakoro' : 'Library'}
               </Link>
               <Link href="/pricing" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {t('nav.pricing', language)}
@@ -228,8 +232,14 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   return (
     <LanguageProvider>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-black focus:rounded-lg focus:font-medium"
+      >
+        Skip to main content
+      </a>
       <Header />
-      <main>{children}</main>
+      <main id="main-content">{children}</main>
       {consent === 'unknown' && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[95%] md:w-[720px]">
           <div className="bg-[var(--surface)] border border-white/10 rounded-xl p-4 shadow-xl">

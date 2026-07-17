@@ -10,10 +10,10 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       try {
-        // If already logged in, go to dashboard
+        // If already logged in, check consents
         const { data: existing } = await supabase.auth.getSession();
         if (existing.session) {
-          router.replace('/dashboard');
+          redirectToOnboardingOrDashboard(existing.session.access_token);
           return;
         }
 
@@ -37,13 +37,38 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        router.replace('/dashboard');
+        const { data: newSession } = await supabase.auth.getSession();
+        if (newSession.session) {
+          redirectToOnboardingOrDashboard(newSession.session.access_token);
+        } else {
+          router.replace('/dashboard');
+        }
       } catch (e: any) {
         setError(e?.message || 'Authentication failed.');
       }
     };
     run();
   }, [router]);
+
+  const redirectToOnboardingOrDashboard = async (token: string) => {
+    try {
+      const res = await fetch('/api/consent', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const required = (data.consents || []).filter((c: any) => c.is_required);
+        const allAccepted = required.every((c: any) => c.accepted);
+        if (!allAccepted) {
+          router.replace('/onboarding');
+          return;
+        }
+      }
+      router.replace('/dashboard');
+    } catch {
+      router.replace('/dashboard');
+    }
+  };
 
   return (
     <div className="container py-12 md:py-16 max-w-md">

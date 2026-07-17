@@ -24,6 +24,9 @@ type PodcastFormState = {
   category_id: string;
   speaker_name: string;
   is_active: boolean;
+  access_tier_id: string;
+  slug: string;
+  status: 'draft' | 'scheduled' | 'published' | 'archived';
 };
 
 const INITIAL_FORM_STATE: PodcastFormState = {
@@ -35,6 +38,9 @@ const INITIAL_FORM_STATE: PodcastFormState = {
   category_id: '',
   speaker_name: '',
   is_active: true,
+  access_tier_id: '',
+  slug: '',
+  status: 'published',
 };
 
 type Podcast = {
@@ -52,6 +58,9 @@ type Podcast = {
   is_system: boolean;
   updated_at: string;
   created_at: string;
+  access_tier_id: string | null;
+  slug: string | null;
+  status: string;
 };
 
 type EpisodeStats = {
@@ -78,6 +87,7 @@ export default function AdminPodcastsPage() {
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [episodeStats, setEpisodeStats] = useState<Map<string, EpisodeStats>>(new Map());
+  const [pricingTiers, setPricingTiers] = useState<{id: string; plan_name: string; display_name_en: string; rank: number}[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,6 +122,7 @@ export default function AdminPodcastsPage() {
     if (!authorized) return;
     fetchPodcasts();
     fetchCategories();
+    fetchPricingTiers();
     setLoading(false);
   }, [authorized]);
 
@@ -172,6 +183,15 @@ export default function AdminPodcastsPage() {
     setEpisodeStats(statsMap);
   }
 
+  async function fetchPricingTiers() {
+    const { data, error } = await supabase
+      .from('pricing_tiers')
+      .select('id, plan_name, display_name_en, rank')
+      .eq('is_active', true)
+      .order('rank', { ascending: true });
+    if (!error && data) setPricingTiers(data);
+  }
+
   async function fetchCategories() {
     const { data, error } = await supabase
       .from('categories')
@@ -196,6 +216,9 @@ export default function AdminPodcastsPage() {
       category_id: p.category_id || '',
       speaker_name: p.speaker_name,
       is_active: p.is_active,
+      access_tier_id: p.access_tier_id || '',
+      slug: p.slug || '',
+      status: (p.status as 'draft' | 'scheduled' | 'published' | 'archived') || 'published',
     });
     const preferred = language === 'rw' ? 'rw' : 'en';
     const preferredTitle = p[`title_${preferred}` as const];
@@ -273,6 +296,9 @@ export default function AdminPodcastsPage() {
         cover_image_url: formData.cover_image_url || null,
         category_id: formData.category_id || null,
         speaker_name: formData.speaker_name || null,
+        access_tier_id: formData.access_tier_id || null,
+        slug: formData.slug || null,
+        status: formData.status,
       };
 
       const res = await fetch('/api/admin/podcasts/save', {
@@ -515,6 +541,48 @@ export default function AdminPodcastsPage() {
                 </div>
               )}
             </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Access Plan <span className="text-red-400">*</span></label>
+                <select
+                  value={formData.access_tier_id}
+                  onChange={(e) => setFormData({ ...formData, access_tier_id: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                >
+                  <option value="">Select plan</option>
+                  {pricingTiers.map((tier) => (
+                    <option key={tier.id} value={tier.id}>
+                      {tier.display_name_en} (Rank {tier.rank})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted mt-1">Sets the minimum subscription required to play episodes.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Publishing Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as 'draft' | 'scheduled' | 'published' | 'archived' })}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">URL Slug</label>
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  placeholder="auto-generated if empty"
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="text-xs text-muted mt-1">SEO-friendly URL: /podcasts/your-slug</p>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -613,10 +681,24 @@ export default function AdminPodcastsPage() {
                   </div>
 
                   {/* Status Badge */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2 py-1 text-xs rounded-full ${p.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
                       {p.is_active ? (language === 'rw' ? 'Irakora' : 'Active') : (language === 'rw' ? 'Ntiyakora' : 'Inactive')}
                     </span>
+                    {p.status && p.status !== 'published' && (
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        p.status === 'draft' ? 'bg-amber-500/20 text-amber-400' :
+                        p.status === 'scheduled' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>
+                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                      </span>
+                    )}
+                    {pricingTiers.find(t => t.id === p.access_tier_id) && (
+                      <span className="px-2 py-1 text-xs rounded-full bg-primary/20 text-primary font-medium">
+                        {pricingTiers.find(t => t.id === p.access_tier_id)?.display_name_en}
+                      </span>
+                    )}
                     {stats && stats.draft_count > 0 && (
                       <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">
                         {stats.draft_count} {language === 'rw' ? 'draft' : 'draft'}{stats.draft_count !== 1 ? 's' : ''}

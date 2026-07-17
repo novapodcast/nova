@@ -4,10 +4,11 @@ import Link from 'next/link';
 import Head from 'next/head';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { FAV_KEY } from '@/lib/constants';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
+import FavoriteButton from '@/components/FavoriteButton';
+import ShareButton from '@/components/ShareButton';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -47,15 +48,6 @@ function setQueue(queue: ListenQueueItem[]): void {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
   } catch {}
-}
-
-function getFavs(): string[] {
-  if (typeof window === 'undefined') return [];
-  try { const raw = localStorage.getItem(FAV_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
-}
-function setFavs(ids: string[]): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(FAV_KEY, JSON.stringify(ids)); } catch {}
 }
 
 function removeFromQueue(id: string): void {
@@ -133,7 +125,6 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
-  const [fav, setFav] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
@@ -206,11 +197,6 @@ export default function EpisodeDetailPage({ params }: Props) {
     load();
   }, [params.id]);
 
-  useEffect(() => {
-    const favs = getFavs();
-    setFav(favs.includes(params.id));
-  }, [params.id]);
-
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '';
     const mins = Math.floor(seconds / 60);
@@ -254,24 +240,6 @@ export default function EpisodeDetailPage({ params }: Props) {
   const description = (language === 'rw' ? episode.description_rw : episode.description_en) || episode.description_en || episode.description_rw || '';
   const podcastTitle = episode.podcasts ? ((language === 'rw' ? episode.podcasts.title_rw : episode.podcasts.title_en) || episode.podcasts.title_en || episode.podcasts.title_rw) : null;
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-
-  const handleShare = async () => {
-    const text = `${title}`;
-    try {
-      // Web Share API (mobile-friendly)
-      if (navigator.share) {
-        await navigator.share({ title, text, url: shareUrl });
-        return;
-      }
-    } catch {}
-    // Fallback: copy link
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      alert('Link copied!');
-    } catch {
-      window.open(shareUrl, '_blank');
-    }
-  };
 
   const sendListenItem = useCallback(async (item: ListenQueueItem): Promise<boolean> => {
     try {
@@ -368,6 +336,7 @@ export default function EpisodeDetailPage({ params }: Props) {
     }
     await postListen({ duration_seconds: Math.round(el?.duration || el?.currentTime || 0), completed: true });
     isPlayingRef.current = false;
+    await saveProgress(el?.currentTime || 0, el?.duration || 0, true);
   };
 
   const handleTimeUpdate = async () => {
@@ -382,24 +351,39 @@ export default function EpisodeDetailPage({ params }: Props) {
       accRef.current = 0;
       await postListen({ duration_seconds: toSend, completed: false });
     }
+    progressSaveRef.current += delta;
+    if (progressSaveRef.current >= 10) {
+      progressSaveRef.current = 0;
+      await saveProgress(el.currentTime, el.duration || 0, false);
+    }
   };
 
   const handleListenNow = () => {
     try { audioRef.current?.play(); } catch {}
   };
 
-  const toggleFav = () => {
-    const ids = getFavs();
-    if (ids.includes(params.id)) {
-      const next = ids.filter((x) => x !== params.id);
-      setFav(false);
-      setFavs(next);
-    } else {
-      const next = Array.from(new Set([...ids, params.id]));
-      setFav(true);
-      setFavs(next);
-    }
+  const saveProgress = async (position: number, dur: number, completed: boolean) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch('/api/progress', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          episode_id: params.id,
+          podcast_id: episode?.podcast_id || null,
+          position_seconds: position,
+          duration_seconds: dur,
+          completed,
+        }),
+      });
+    } catch {}
   };
+
+  const progressSaveRef = useRef<number>(0);
 
   return (
     <>
@@ -450,16 +434,13 @@ export default function EpisodeDetailPage({ params }: Props) {
               </div>
             )}
 
-            <div className="flex gap-3">
-              <button onClick={handleListenNow} className="px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
-                ▶ Listen Now
+            <div className="flex flex-wrap gap-3">
+              <button onClick={handleListenNow} className="flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                {language === 'rw' ? 'Kumva None' : 'Listen Now'}
               </button>
-              <button onClick={toggleFav} className={`px-6 py-3 rounded-lg font-semibold transition ${fav ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-white/5 text-white hover:bg-white/10'}`}>
-                {fav ? '✓ In Favorites' : '+ Add to Favorites'}
-              </button>
-              <button onClick={handleShare} className="px-6 py-3 rounded-lg bg-white/5 text-white font-semibold hover:bg-white/10 transition">
-                Share
-              </button>
+              <FavoriteButton episodeId={params.id} variant="full" />
+              <ShareButton episodeId={params.id} podcastId={episode.podcast_id || undefined} title={title} variant="full" />
             </div>
 
             {episode.audio_url && (
@@ -483,17 +464,7 @@ export default function EpisodeDetailPage({ params }: Props) {
               </div>
             )}
 
-            <div className="mt-8 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <p className="text-sm text-blue-400">
-                <strong>Note:</strong> Full playback and favorites are available in the mobile app. <Link href="/pricing" className="underline">Subscribe</Link> to unlock premium features.
-              </p>
-            </div>
           </div>
-        </div>
-        <div className="mt-6 flex items-center gap-3 text-sm">
-          <a href={`https://x.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">Share on X</a>
-          <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">Facebook</a>
-          <a href={`https://wa.me/?text=${encodeURIComponent(title + ' ' + shareUrl)}`} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded bg-white/5 hover:bg-white/10">WhatsApp</a>
         </div>
 
         {relatedEpisodes.length > 0 && (

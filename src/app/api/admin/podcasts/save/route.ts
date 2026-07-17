@@ -1,16 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function isAdminEmailServer(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const raw = process.env.ADMIN_EMAILS || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '';
-  const defaults = ['admin@nova.co.rw', 'novapodcast2019@gmail.com'];
-  const list = Array.from(new Set([...(raw ? raw.split(',') : []), ...defaults]))
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return list.includes(email.toLowerCase());
-}
+import { verifyAdmin, getAdminClient } from '@/lib/auth/admin';
 
 type SaveBody = {
   id?: string | null;
@@ -22,6 +12,10 @@ type SaveBody = {
   category_id?: string | null;
   speaker_name?: string;
   is_active?: boolean;
+  access_tier_id?: string | null;
+  slug?: string | null;
+  status?: 'draft' | 'scheduled' | 'published' | 'archived';
+  scheduled_at?: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -32,54 +26,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: 'Supabase env not configured' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
-
-    const admin = serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    }) : null;
-
-    const { data: userRes, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userRes?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    let isAdmin = false;
-    if (admin) {
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    } else {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userRes.user.id)
-        .single();
-      if (profile?.is_admin) isAdmin = true;
-    }
-
-    if (!isAdmin && userRes.user.email) {
-      isAdmin = isAdminEmailServer(userRes.user.email);
-    }
-
+    const { isAdmin, adminClient, userClient } = await verifyAdmin(token);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const clientForWrite = getAdminClient(adminClient, userClient);
     const body = (await request.json()) as SaveBody;
-    const clientForWrite = admin ?? supabase;
     const str = (v: string | null | undefined) => (v && v.trim()) ? v.trim() : null;
 
     // Validate: at least one title must be provided
@@ -105,6 +58,10 @@ export async function POST(request: NextRequest) {
       category_id: body.category_id || null,
       speaker_name: body.speaker_name || '',
       is_active: body.is_active ?? true,
+      access_tier_id: body.access_tier_id || null,
+      slug: str(body.slug),
+      status: body.status || 'published',
+      scheduled_at: body.scheduled_at || null,
     };
 
     if (body.id) {

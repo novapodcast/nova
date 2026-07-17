@@ -28,10 +28,10 @@ interface Subscription {
   plan_name?: string;
 }
 
-type Tab = 'profile' | 'billing' | 'invoices';
+type Tab = 'profile' | 'billing' | 'invoices' | 'consents';
 
 const validTab = (value: string | null): Tab => {
-  if (value === 'billing' || value === 'invoices') return value;
+  if (value === 'billing' || value === 'invoices' || value === 'consents') return value;
   return 'profile';
 };
 
@@ -52,6 +52,9 @@ export default function AccountSettings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [consents, setConsents] = useState<any[]>([]);
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [accessToken, setAccessToken] = useState<string>('');
 
   // Sync active tab with URL query param
   useEffect(() => {
@@ -160,6 +163,18 @@ export default function AccountSettings() {
         .limit(50);
       setPayments((pays || []) as Payment[]);
 
+      // Fetch consents
+      setAccessToken(sessionData.session.access_token);
+      try {
+        const consentRes = await fetch('/api/consent', {
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        });
+        if (consentRes.ok) {
+          const consentData = await consentRes.json();
+          setConsents(consentData.consents || []);
+        }
+      } catch {}
+
       setLoading(false);
     };
     loadData();
@@ -236,7 +251,34 @@ export default function AccountSettings() {
     { key: 'profile', label: t('profile.profile', language) },
     { key: 'billing', label: t('profile.billing', language) },
     { key: 'invoices', label: t('profile.invoices', language) },
+    { key: 'consents', label: language === 'rw' ? 'Ibyemera' : 'Privacy & Consents' },
   ];
+
+  const toggleConsent = (id: string) => {
+    setConsents(prev => prev.map(c => c.id === id ? { ...c, accepted: !c.accepted } : c));
+  };
+
+  const saveConsents = async () => {
+    setConsentSaving(true);
+    try {
+      const res = await fetch('/api/consent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          consents: consents.map(c => ({ consent_type_id: c.id, accepted: c.accepted })),
+        }),
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: language === 'rw' ? 'Ibyemera byabitswe.' : 'Consents updated successfully.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update consents.' });
+    }
+    setConsentSaving(false);
+  };
 
   if (loading) {
     return (
@@ -523,6 +565,85 @@ export default function AccountSettings() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'consents' && (
+          <div className="space-y-6">
+            <div className="bg-[var(--surface)] rounded-2xl p-6 md:p-8 ring-1 ring-white/5">
+              <h3 className="text-lg font-semibold text-white mb-2">
+                {language === 'rw' ? 'Ibyemera n\'Ibanga' : 'Privacy & Consents'}
+              </h3>
+              <p className="text-sm text-muted mb-6">
+                {language === 'rw'
+                  ? 'Hano ushobora kureba no guhindura ibyo wemera. Amategeko n\'Itegeko ni ngombwa.'
+                  : 'Manage your consent preferences here. Terms & Privacy Policy are required.'}
+              </p>
+
+              <div className="space-y-5">
+                {consents.map((c) => (
+                  <div key={c.id} className={`p-4 rounded-xl ${c.is_required ? 'bg-red-500/5 border border-red-500/10' : 'bg-white/5 border border-white/10'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-white text-sm">
+                            {language === 'rw' ? c.display_name_rw : c.display_name_en}
+                          </span>
+                          {c.is_required && (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+                              {language === 'rw' ? 'Ngombwa' : 'Required'}
+                            </span>
+                          )}
+                          {!c.is_toggle && (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-blue-500/20 text-blue-400">
+                              {language === 'rw' ? 'Amakuru' : 'Info'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted">
+                          {language === 'rw' ? c.description_rw : c.description_en}
+                        </p>
+                        {c.accepted_at && (
+                          <p className="text-xs text-muted mt-2">
+                            {language === 'rw' ? 'Byemewe ku' : 'Accepted on'} {new Date(c.accepted_at).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      {c.is_toggle && (
+                        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={c.accepted}
+                            onChange={() => toggleConsent(c.id)}
+                            disabled={c.is_required}
+                            className="sr-only peer"
+                          />
+                          <div className={`w-11 h-6 rounded-full transition ${c.accepted ? 'bg-primary' : 'bg-white/20'} ${c.is_required ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform mt-0.5 ${c.accepted ? 'translate-x-5 ml-0.5' : 'translate-x-0.5'}`} />
+                          </div>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {message && (
+                <div className={`mt-6 p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                  {message.text}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-6 mt-6 border-t border-white/10">
+                <button
+                  onClick={saveConsents}
+                  disabled={consentSaving}
+                  className="px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
+                >
+                  {consentSaving ? (language === 'rw' ? 'Bika…' : 'Saving…') : (language === 'rw' ? 'Bika Ibyemera' : 'Save Preferences')}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

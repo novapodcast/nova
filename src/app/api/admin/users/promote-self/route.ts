@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
-function isAdminEmailServer(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const raw = process.env.ADMIN_EMAILS || process.env.NEXT_PUBLIC_ADMIN_EMAILS || '';
-  const defaults = ['admin@nova.co.rw', 'novapodcast2019@gmail.com'];
-  const list = Array.from(new Set([...(raw ? raw.split(',') : []), ...defaults]))
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return list.includes(email.toLowerCase());
-}
+import { isAdminEmail } from '@/lib/auth/admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +40,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     const alreadyAdmin = !!prof?.is_admin;
-    const allowlisted = isAdminEmailServer(userRes.user.email || null);
+    const allowlisted = isAdminEmail(userRes.user.email || null);
 
     if (!alreadyAdmin && !allowlisted) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

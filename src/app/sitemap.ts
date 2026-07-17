@@ -23,10 +23,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/favorites`,
+      url: `${baseUrl}/library`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/search`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.6,
     },
     {
       url: `${baseUrl}/checkout`,

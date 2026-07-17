@@ -264,7 +264,10 @@ export default function DashboardPage() {
         <div className="bg-[var(--surface)] rounded-xl p-5 ring-1 ring-white/5">
           <div className="text-sm text-muted mb-2">{t('dashboard.favorites', language)}</div>
           <div className="text-xl font-semibold mb-3">{favorites.length} {t('common.episodes', language)}</div>
-          <Link href="/podcasts" className="text-sm text-primary hover:underline">{t('dashboard.browseEpisodes', language)}</Link>
+          <div className="flex gap-4">
+            <Link href="/library" className="text-sm text-primary hover:underline">{language === 'rw' ? 'Umwugakoro' : 'Library'}</Link>
+            <Link href="/notifications" className="text-sm text-primary hover:underline">{language === 'rw' ? 'Imenyabintu' : 'Notifications'}</Link>
+          </div>
         </div>
       </div>
 

@@ -3,8 +3,11 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { fetchPublicPodcastById } from '@/lib/data/podcasts';
+import { fetchPublicPodcastByIdOrSlug } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
+import FollowButton from '@/components/FollowButton';
+import ShareButton from '@/components/ShareButton';
+import FavoriteButton from '@/components/FavoriteButton';
 
 interface Podcast {
   id: string;
@@ -49,7 +52,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     const load = async () => {
-      const { data: pod, error: podError } = await fetchPublicPodcastById(params.id);
+      const { data: pod, error: podError } = await fetchPublicPodcastByIdOrSlug(params.id);
 
       if (podError || !pod) {
         setError(true);
@@ -62,8 +65,8 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
       const { data: eps } = await supabase
         .from('episodes')
         .select('id, title_en, title_rw, description_en, description_rw, cover_image_url, audio_url, duration_seconds, published_at, episode_number, categories')
-        .eq('podcast_id', params.id)
-        .eq('is_active', true)
+        .eq('podcast_id', (pod as any).id)
+        .eq('status', 'published')
         .order('published_at', { ascending: true });
 
       if (eps) setEpisodes(eps as Episode[]);
@@ -73,7 +76,31 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
   }, [params.id]);
 
   // Audio player handlers
-  const playEpisode = (episode: Episode) => {
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [upgradeRequired, setUpgradeRequired] = useState<{ content_tier_rank: number; user_tier_rank: number } | null>(null);
+  const [loadingStream, setLoadingStream] = useState(false);
+
+  const trackPlaybackEvent = async (eventType: string, extra?: Record<string, any>) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      await fetch('/api/analytics/playback', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          episode_id: currentEpisode?.id || null,
+          podcast_id: podcast?.id || null,
+          event_type: eventType,
+          ...extra,
+        }),
+      });
+    } catch {}
+  };
+
+  const playEpisode = async (episode: Episode) => {
     if (currentEpisode?.id === episode.id) {
       // Toggle play/pause for current episode
       if (isPlaying) {
@@ -83,19 +110,61 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
       }
       setIsPlaying(!isPlaying);
     } else {
-      // Play new episode
+      // Play new episode - fetch signed URL
+      setUpgradeRequired(null);
+      setLoadingStream(true);
       setCurrentEpisode(episode);
       setIsPlaying(true);
       setProgress(0);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch(`/api/stream/episode/${episode.id}`, { headers });
+        const data = await res.json();
+
+        if (res.status === 402) {
+          // Upgrade required
+          setUpgradeRequired({
+            content_tier_rank: data.content_tier_rank,
+            user_tier_rank: data.user_tier_rank,
+          });
+          trackPlaybackEvent('plan_gate_hit', {
+            plan_gate_hit: true,
+            upgrade_prompt_shown: true,
+            user_tier_rank: data.user_tier_rank,
+            content_tier_rank: data.content_tier_rank,
+          });
+          setIsPlaying(false);
+          setLoadingStream(false);
+          return;
+        }
+
+        if (!res.ok || !data.url) {
+          setIsPlaying(false);
+          setLoadingStream(false);
+          return;
+        }
+
+        setStreamUrl(data.url);
+        setLoadingStream(false);
+      } catch {
+        setIsPlaying(false);
+        setLoadingStream(false);
+      }
     }
   };
 
   useEffect(() => {
-    if (currentEpisode && audioRef.current) {
-      audioRef.current.src = currentEpisode.audio_url || '';
+    if (streamUrl && audioRef.current) {
+      audioRef.current.src = streamUrl;
       audioRef.current.play().catch(() => setIsPlaying(false));
     }
-  }, [currentEpisode]);
+  }, [streamUrl]);
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -257,8 +326,14 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
             </div>
             
             {description && (
-              <p className="text-muted leading-relaxed whitespace-pre-wrap">{description}</p>
+              <p className="text-muted leading-relaxed whitespace-pre-wrap mb-5">{description}</p>
             )}
+            
+            {/* Action buttons */}
+            <div className="flex items-center gap-3">
+              <FollowButton podcastId={podcast.id} />
+              <ShareButton podcastId={podcast.id} title={title} variant="full" />
+            </div>
           </div>
         </div>
 
@@ -373,6 +448,58 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
           )}
         </div>
       </div>
+
+      {/* Upgrade prompt overlay */}
+      {upgradeRequired && currentEpisode && (
+        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/95 to-black/90 backdrop-blur-lg border-t border-primary/30 z-50">
+          <div className="container py-6">
+            <div className="max-w-2xl mx-auto text-center">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary/20 flex items-center justify-center">
+                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">
+                {language === 'rw' ? 'Iyi gice kirisaba gushyura' : 'This episode requires a higher plan'}
+              </h3>
+              <p className="text-sm text-muted mb-4">
+                {language === 'rw'
+                  ? 'Iyi gice kiri mu giciro kingana na ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.content_tier_rank] + '. Ushyura muri ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.user_tier_rank] + '.'
+                  : 'This content is on the ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.content_tier_rank] + ' plan. You are on the ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.user_tier_rank] + ' plan.'}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Link
+                  href="/pricing"
+                  onClick={() => trackPlaybackEvent('upgrade_clicked', { upgrade_converted: true })}
+                  className="px-6 py-2.5 bg-primary text-black font-semibold rounded-lg hover:opacity-90 transition"
+                >
+                  {language === 'rw' ? 'Iyandikishe' : 'Upgrade Plan'}
+                </Link>
+                <button
+                  onClick={() => { setUpgradeRequired(null); setCurrentEpisode(null); }}
+                  className="px-6 py-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+                >
+                  {language === 'rw' ? 'Komeza kureba' : 'Browse other episodes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading stream indicator */}
+      {loadingStream && currentEpisode && !upgradeRequired && (
+        <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-lg border-t border-white/10 z-50">
+          <div className="container py-4">
+            <div className="flex items-center gap-3 justify-center">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-muted">
+                {language === 'rw' ? 'Birategura…' : 'Loading stream…'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hidden audio element */}
       <audio

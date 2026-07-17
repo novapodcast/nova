@@ -20,6 +20,7 @@ type AnalyticsData = {
 export default function AdminAnalyticsPage() {
   const { loading: guardLoading, authorized } = useAdminGuard();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [start, setStart] = useState<string>('');
   const [end, setEnd] = useState<string>('');
@@ -27,15 +28,21 @@ export default function AdminAnalyticsPage() {
   useEffect(() => {
     if (authorized) {
       fetchAnalytics();
-      setLoading(false);
     }
   }, [authorized]);
 
   async function fetchAnalytics() {
+    setLoading(true);
+    setError(null);
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      if (!token) return;
+      if (!token) {
+        setError('No authentication token found');
+        setLoading(false);
+        return;
+      }
 
       const params = new URLSearchParams();
       if (start) params.set('start', new Date(start).toISOString());
@@ -48,9 +55,16 @@ export default function AdminAnalyticsPage() {
       if (res.ok) {
         const data = await res.json();
         setAnalytics(data);
+        setError(null);
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        setError(errorData.error || `Failed to load analytics (${res.status})`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch analytics', e);
+      setError(e?.message || 'Network error - please check your connection');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -125,10 +139,38 @@ export default function AdminAnalyticsPage() {
     }
   }
 
-  if (guardLoading || !authorized || loading) {
+  if (guardLoading || !authorized) {
     return (
       <div className="container py-12 md:py-16">
-        <div className="text-muted">{guardLoading ? 'Checking access…' : 'Loading analytics…'}</div>
+        <div className="text-muted">{guardLoading ? 'Checking access…' : 'Unauthorized'}</div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-muted">Loading analytics…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-red-400 mb-2">Failed to load analytics</h3>
+          <p className="text-sm text-red-300 mb-4">{error}</p>
+          <button
+            onClick={fetchAnalytics}
+            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -136,7 +178,7 @@ export default function AdminAnalyticsPage() {
   if (!analytics) {
     return (
       <div className="container py-12 md:py-16">
-        <div className="text-muted">Failed to load analytics</div>
+        <div className="text-muted">No analytics data available</div>
       </div>
     );
   }
