@@ -46,94 +46,156 @@ export default function PodcastsPage() {
 
   const formatCount = (value: number | null | undefined) => {
     if (!value) return '0';
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
     return new Intl.NumberFormat(language === 'rw' ? 'en-GB' : 'en-US').format(value);
+  };
+
+  const formatEpisodeCount = (count: number | null | undefined) => {
+    const n = count ?? 0;
+    if (language === 'rw') {
+      return n === 1 ? '1 igice' : `${n} ibice`;
+    }
+    return n === 1 ? '1 Episode' : `${n} Episodes`;
   };
 
   return (
     <div className="container py-12 md:py-16 animate-fade-in-up">
-      <h1 className="text-3xl font-bold mb-2">
-        {language === 'rw' ? 'Podikasti zose' : 'All Podcasts'}
-      </h1>
-      <p className="text-sm text-muted mb-6">
-        {language === 'rw'
-          ? 'Shakisha amapodikasi yacu, uhitemo uyumve.'
-          : 'Browse our collection of podcasts and start listening.'}
-      </p>
-
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder={language === 'rw' ? '🔍 Shakisha podikasti...' : '🔍 Search podcasts...'}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition"
-        />
+      {/* Header */}
+      <div className="max-w-2xl mb-10">
+        <h1 className="text-4xl md:text-5xl font-bold mb-3 tracking-tight">
+          {language === 'rw' ? 'Podikasti' : 'Podcasts'}
+        </h1>
+        <p className="text-lg text-muted">
+          {language === 'rw'
+            ? 'Shakisha amapodikasi yacu, uhitemo uyumve.'
+            : 'Discover inspiring content from our collection of shows.'}
+        </p>
       </div>
 
+      {/* Search */}
+      <div className="mb-10">
+        <div className="relative max-w-md">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            placeholder={language === 'rw' ? 'Shakisha podikasti...' : 'Search podcasts...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+          />
+        </div>
+      </div>
+
+      {/* Loading skeleton - square cards */}
       {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-[var(--surface)] rounded-2xl overflow-hidden ring-1 ring-white/5">
-              <div className="h-48 bg-white/5 animate-pulse" />
-              <div className="p-5 space-y-3">
-                <div className="h-5 w-3/4 bg-white/5 rounded animate-pulse" />
-                <div className="h-4 w-full bg-white/5 rounded animate-pulse" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="group">
+              <div className="aspect-square rounded-xl bg-white/5 animate-pulse mb-3" />
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 bg-white/5 rounded animate-pulse" />
+                <div className="h-3 w-1/2 bg-white/5 rounded animate-pulse" />
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Empty state */}
       {!loading && podcasts.length === 0 && (
-        <div className="text-center py-12">
-          <div className="text-6xl mb-4">🎙️</div>
-          <h2 className="text-xl font-semibold mb-2">
+        <div className="text-center py-20">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white/5 flex items-center justify-center">
+            <span className="text-5xl">🎙️</span>
+          </div>
+          <h2 className="text-2xl font-semibold mb-3">
             {language === 'rw' ? 'Nta podikasti ziboneka' : 'No podcasts yet'}
           </h2>
-          <p className="text-muted">
-            {language === 'rw' ? 'Dusubireho vuba tugeze amapodikasi mashya!' : 'Check back soon for new content!'}
+          <p className="text-muted max-w-md mx-auto">
+            {language === 'rw' ? 'Dusubireho vuba tugeze amapodikasti mashya!' : 'Check back soon for new content!'}
           </p>
         </div>
       )}
 
+      {/* No search results */}
+      {!loading && podcasts.length > 0 && visiblePodcasts.length === 0 && (
+        <div className="text-center py-16">
+          <p className="text-muted">
+            {language === 'rw' ? 'Nta bisubizo biboneka.' : 'No podcasts match your search.'}
+          </p>
+        </div>
+      )}
+
+      {/* Podcast grid - marketplace style with square artwork */}
       {!loading && visiblePodcasts.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
           {visiblePodcasts.map((podcast) => {
             const title = (language === 'rw' ? podcast.title_rw : podcast.title_en) || podcast.title_en || podcast.title_rw || 'Untitled';
-            const description = (language === 'rw' ? podcast.description_rw : podcast.description_en) || '';
 
             return (
               <Link
                 key={podcast.id}
                 href={`/podcasts/${podcast.id}`}
-                className="group block bg-[var(--surface)] rounded-2xl overflow-hidden ring-1 ring-white/5 hover:ring-white/20 transition"
+                className="group block"
               >
-                <div className="relative h-48 bg-black/40">
+                {/* Square artwork container */}
+                <div className="relative aspect-square rounded-xl bg-black/40 overflow-hidden ring-1 ring-white/5 group-hover:ring-primary/50 transition-all duration-300 group-hover:shadow-[0_8px_30px_rgba(34,197,94,0.15)]">
                   {podcast.cover_image_url ? (
                     <Image
                       src={podcast.cover_image_url}
                       alt={title}
                       fill
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                      className="object-cover"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="h-full flex items-center justify-center text-muted">Cover coming soon</div>
+                    <div className="h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                      <span className="text-4xl opacity-50">🎙️</span>
+                    </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-                  <div className="absolute left-4 bottom-4 text-xs uppercase tracking-wider text-white/80">
-                    {podcast.speaker_name}
+                  {/* Subtle gradient overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  
+                  {/* Play indicator on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                      <svg className="w-6 h-6 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
-                <div className="p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold line-clamp-2">{title}</h3>
-                    <div className="text-xs text-muted">{formatCount(podcast.total_episodes)} eps</div>
-                  </div>
-                  <p className="text-sm text-muted line-clamp-2">{description}</p>
-                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted">
-                    <span>{language === 'rw' ? 'Abamaze kuyumva' : 'Listeners'}: {formatCount(podcast.total_listeners)}</span>
-                    <span className="text-primary">View Episodes →</span>
+
+                {/* Metadata below artwork */}
+                <div className="mt-3 space-y-1">
+                  <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                    {title}
+                  </h3>
+                  {podcast.speaker_name && (
+                    <p className="text-sm text-muted line-clamp-1">
+                      {podcast.speaker_name}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 text-xs text-muted pt-1">
+                    <span className="flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                      {formatEpisodeCount(podcast.total_episodes)}
+                    </span>
+                    {(podcast.total_listeners ?? 0) > 0 && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        {formatCount(podcast.total_listeners)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>
