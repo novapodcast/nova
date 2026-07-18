@@ -36,7 +36,7 @@ export default function PricingPage() {
     };
     checkAuth();
 
-    const cached = getCache<PricingTier[]>('pricing_tiers_v1');
+    const cached = getCache<PricingTier[]>('pricing_tiers_v2');
     if (cached && cached.length) {
       setTiers(cached);
       setLoading(false);
@@ -50,7 +50,7 @@ export default function PricingPage() {
       if (!error && data) {
         const filtered = (data as PricingTier[]).filter((t) => [0, 1, 12].includes(t.duration_months));
         setTiers(filtered);
-        setCache('pricing_tiers_v1', filtered, 5 * 60 * 1000);
+        setCache('pricing_tiers_v2', filtered, 5 * 60 * 1000);
       }
       setLoading(false);
     };

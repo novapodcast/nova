@@ -51,8 +51,8 @@ export default function AdminPricingPage() {
     const { data, error } = await supabase
       .from('pricing_tiers')
       .select('*')
+      .order('sort_order', { ascending: true })
       .order('plan_name', { ascending: true });
-    
     if (!error && data) {
       setTiers(data as PricingTier[]);
     }
@@ -133,6 +133,32 @@ export default function AdminPricingPage() {
     );
   }
 
+  const familyOf = (tier: PricingTier) => {
+    const base = tier.plan_name?.split('_')[0]?.trim();
+    return base || tier.display_name_en || tier.display_name_rw || tier.plan_name;
+  };
+
+  const grouped = tiers.reduce((acc, t) => {
+    const fam = familyOf(t);
+    if (!acc[fam]) acc[fam] = {} as { monthly?: PricingTier; annual?: PricingTier; other?: PricingTier[] };
+    if (t.duration_months === 1) acc[fam].monthly = t;
+    else if (t.duration_months === 12) acc[fam].annual = t;
+    else {
+      acc[fam].other = acc[fam].other ? [...acc[fam].other!, t] : [t];
+    }
+    return acc;
+  }, {} as Record<string, { monthly?: PricingTier; annual?: PricingTier; other?: PricingTier[] }>);
+
+  const planOrder = ['Basic', 'Pro', 'Premium'];
+  const families = Object.keys(grouped).sort((a, b) => {
+    const ia = planOrder.indexOf(a);
+    const ib = planOrder.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
   return (
     <div className="container py-12 md:py-16">
       {allowlistOnly && (
@@ -182,148 +208,120 @@ export default function AdminPricingPage() {
         </div>
       )}
 
-      <div className="space-y-6">
-        {tiers.map((tier) => (
-          <div key={tier.id} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
-            {editingId === tier.id ? (
-              // Edit Mode
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm mb-1">{t('admin.planName', language)} (EN)</label>
-                    <input
-                      type="text"
-                      value={editForm.display_name_en || ''}
-                      onChange={(e) => setEditForm({ ...editForm, display_name_en: e.target.value })}
-                      className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">{t('admin.planName', language)} (RW)</label>
-                    <input
-                      type="text"
-                      value={editForm.display_name_rw || ''}
-                      onChange={(e) => setEditForm({ ...editForm, display_name_rw: e.target.value })}
-                      className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">{t('admin.price', language)} (RWF)</label>
-                    <input
-                      type="number"
-                      value={editForm.price_rwf || 0}
-                      onChange={(e) => setEditForm({ ...editForm, price_rwf: parseInt(e.target.value) || 0 })}
-                      className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-1">{t('admin.savings', language)} (RWF)</label>
-                    <input
-                      type="number"
-                      value={editForm.savings_rwf || 0}
-                      onChange={(e) => setEditForm({ ...editForm, savings_rwf: parseInt(e.target.value) || 0 })}
-                      className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">{t('admin.features', language)} (EN)</label>
-                  <textarea
-                    value={(editForm.features_en || []).join('\n')}
-                    onChange={(e) => setEditForm({ ...editForm, features_en: e.target.value.split('\n').filter(Boolean) })}
-                    className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2 h-24"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">{t('admin.features', language)} (RW)</label>
-                  <textarea
-                    value={(editForm.features_rw || []).join('\n')}
-                    onChange={(e) => setEditForm({ ...editForm, features_rw: e.target.value.split('\n').filter(Boolean) })}
-                    className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2 h-24"
-                  />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={editForm.is_highlighted || false}
-                      onChange={(e) => setEditForm({ ...editForm, is_highlighted: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{t('admin.highlighted', language)}</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={editForm.is_active !== false}
-                      onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{t('admin.active', language)}</span>
-                  </label>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={saveEdit}
-                    disabled={saving}
-                    className="px-4 py-2 rounded-md bg-primary text-black font-semibold hover:opacity-90 disabled:opacity-50"
-                  >
-                    {saving ? t('admin.saving', language) : t('admin.save', language)}
-                  </button>
-                  <button
-                    onClick={cancelEdit}
-                    className="px-4 py-2 rounded-md border border-white/10 hover:border-white/30"
-                  >
-                    {t('admin.cancel', language)}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // View Mode
-              <div className="flex items-start justify-between">
-                <div className="flex-grow">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-bold">{tier.display_name_en}</h3>
-                    <span className="text-sm font-mono bg-black/30 px-2 py-0.5 rounded">{tier.plan_name}</span>
-                    {tier.duration_months === 1 && <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-semibold">MONTHLY</span>}
-                    {tier.duration_months === 12 && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded font-semibold">ANNUAL</span>}
-                    {tier.is_highlighted && <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded">{t('admin.mostPopular', language)}</span>}
-                    {!tier.is_active && <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">{t('admin.inactive', language)}</span>}
-                  </div>
-                  <div className="mb-3">
-                    <span className="text-2xl font-bold">{tier.price_rwf.toLocaleString()} RWF</span>
-                    {tier.duration_months === 1 && <span className="text-muted ml-2">per month</span>}
-                    {tier.duration_months === 12 && (
-                      <>
-                        <span className="text-muted ml-2">per year</span>
-                        <span className="text-sm text-primary ml-3">({Math.round(tier.price_rwf / 12).toLocaleString()} RWF/mo)</span>
-                      </>
+      <div className="space-y-8">
+        {families.map((fam) => {
+          const g = grouped[fam];
+          const variants: Array<{ label: string; tier?: PricingTier }> = [
+            { label: 'Monthly', tier: g.monthly },
+            { label: 'Annual', tier: g.annual },
+          ];
+          return (
+            <div key={fam} className="bg-[var(--surface)] rounded-xl p-6 ring-1 ring-white/5">
+              <h2 className="text-2xl font-bold mb-4">{fam}</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {variants.map(({ label, tier }) => (
+                  <div key={label} className="rounded-lg border border-white/10 p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm px-2 py-0.5 rounded bg-white/5">{label}</span>
+                        {tier?.is_highlighted && (
+                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded">{t('admin.mostPopular', language)}</span>
+                        )}
+                        {tier && !tier.is_active && (
+                          <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">{t('admin.inactive', language)}</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        {tier && (
+                          <>
+                            <button onClick={() => startEdit(tier)} className="px-3 py-1.5 text-sm rounded-md bg-white/5 hover:bg-white/10">
+                              {t('admin.edit', language)}
+                            </button>
+                            <button onClick={() => toggleActive(tier)} className="px-3 py-1.5 text-sm rounded-md border border-white/10 hover:border-white/30">
+                              {tier.is_active ? t('admin.deactivate', language) : t('admin.activate', language)}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {tier ? (
+                      editingId === tier.id ? (
+                        <div className="space-y-4">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm mb-1">{t('admin.planName', language)} (EN)</label>
+                              <input type="text" value={editForm.display_name_en || ''} onChange={(e) => setEditForm({ ...editForm, display_name_en: e.target.value })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2" />
+                            </div>
+                            <div>
+                              <label className="block text-sm mb-1">{t('admin.planName', language)} (RW)</label>
+                              <input type="text" value={editForm.display_name_rw || ''} onChange={(e) => setEditForm({ ...editForm, display_name_rw: e.target.value })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2" />
+                            </div>
+                            <div>
+                              <label className="block text-sm mb-1">{t('admin.price', language)} (RWF)</label>
+                              <input type="number" value={editForm.price_rwf || 0} onChange={(e) => setEditForm({ ...editForm, price_rwf: parseInt(e.target.value) || 0 })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2" />
+                            </div>
+                            <div>
+                              <label className="block text-sm mb-1">{t('admin.savings', language)} (RWF)</label>
+                              <input type="number" value={editForm.savings_rwf || 0} onChange={(e) => setEditForm({ ...editForm, savings_rwf: parseInt(e.target.value) || 0 })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2" />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm mb-1">{t('admin.features', language)} (EN)</label>
+                            <textarea value={(editForm.features_en || []).join('\n')} onChange={(e) => setEditForm({ ...editForm, features_en: e.target.value.split('\n').filter(Boolean) })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2 h-24" />
+                          </div>
+                          <div>
+                            <label className="block text-sm mb-1">{t('admin.features', language)} (RW)</label>
+                            <textarea value={(editForm.features_rw || []).join('\n')} onChange={(e) => setEditForm({ ...editForm, features_rw: e.target.value.split('\n').filter(Boolean) })} className="w-full rounded-md bg-black/40 border border-white/10 px-3 py-2 h-24" />
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2">
+                              <input type="checkbox" checked={editForm.is_highlighted || false} onChange={(e) => setEditForm({ ...editForm, is_highlighted: e.target.checked })} className="rounded" />
+                              <span className="text-sm">{t('admin.highlighted', language)}</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input type="checkbox" checked={editForm.is_active !== false} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} className="rounded" />
+                              <span className="text-sm">{t('admin.active', language)}</span>
+                            </label>
+                          </div>
+                          <div className="flex gap-3">
+                            <button onClick={saveEdit} disabled={saving} className="px-4 py-2 rounded-md bg-primary text-black font-semibold hover:opacity-90 disabled:opacity-50">
+                              {saving ? t('admin.saving', language) : t('admin.save', language)}
+                            </button>
+                            <button onClick={cancelEdit} className="px-4 py-2 rounded-md border border-white/10 hover:border-white/30">
+                              {t('admin.cancel', language)}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-2">
+                            <span className="text-2xl font-bold">{tier.price_rwf.toLocaleString()} RWF</span>
+                            {tier.duration_months === 1 && <span className="text-muted ml-2">per month</span>}
+                            {tier.duration_months === 12 && (
+                              <>
+                                <span className="text-muted ml-2">per year</span>
+                                <span className="text-sm text-primary ml-3">({Math.round(tier.price_rwf / 12).toLocaleString()} RWF/mo)</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="text-sm text-muted">
+                            <strong>Features:</strong> {tier.features_en.join(', ')}
+                          </div>
+                        </>
+                      )
+                    ) : (
+                      <div className="text-sm text-muted">No {label.toLowerCase()} variant found for {fam}. Create and activate a {label.toLowerCase()} tier in the pricing_tiers table.</div>
                     )}
-                    {tier.duration_months > 1 && tier.duration_months !== 12 && <span className="text-muted ml-2">/ {tier.duration_months} months</span>}
-                    {tier.savings_rwf > 0 && <span className="text-green-400 ml-3 text-sm">💰 Save {tier.savings_rwf.toLocaleString()} RWF</span>}
                   </div>
-                  <div className="text-sm text-muted">
-                    <strong>Features:</strong> {tier.features_en.join(', ')}
-                  </div>
-                </div>
-                <div className="flex gap-2 ml-4">
-                  <button
-                    onClick={() => startEdit(tier)}
-                    className="px-3 py-1.5 text-sm rounded-md bg-white/5 hover:bg-white/10"
-                  >
-                    {t('admin.edit', language)}
-                  </button>
-                  <button
-                    onClick={() => toggleActive(tier)}
-                    className="px-3 py-1.5 text-sm rounded-md border border-white/10 hover:border-white/30"
-                  >
-                    {tier.is_active ? t('admin.deactivate', language) : t('admin.activate', language)}
-                  </button>
-                </div>
+                ))}
               </div>
-            )}
-          </div>
-        ))}
+              {grouped[fam].other && grouped[fam].other!.length > 0 && (
+                <div className="mt-4 text-xs text-muted">Other variants: {grouped[fam].other!.map(o => `${o.duration_months}m`).join(', ')}</div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-8 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">

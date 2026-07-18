@@ -125,6 +125,9 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [relatedEpisodes, setRelatedEpisodes] = useState<Episode[]>([]);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [loadingStream, setLoadingStream] = useState<boolean>(false);
+  const [upgradeRequired, setUpgradeRequired] = useState<{ user_tier_rank: number; content_tier_rank: number } | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
@@ -358,9 +361,37 @@ export default function EpisodeDetailPage({ params }: Props) {
     }
   };
 
-  const handleListenNow = () => {
-    try { audioRef.current?.play(); } catch {}
+  const handleListenNow = async () => {
+    setUpgradeRequired(null);
+    setLoadingStream(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      const res = await fetch(`/api/stream/episode/${params.id}`, { headers });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 402) {
+        setUpgradeRequired({ user_tier_rank: data.user_tier_rank ?? 0, content_tier_rank: data.content_tier_rank ?? 0 });
+        setLoadingStream(false);
+        return;
+      }
+      if (!res.ok || !data?.url) {
+        setLoadingStream(false);
+        return;
+      }
+      setStreamUrl(data.url);
+      setLoadingStream(false);
+    } catch {
+      setLoadingStream(false);
+    }
   };
+
+  useEffect(() => {
+    if (streamUrl && audioRef.current) {
+      audioRef.current.src = streamUrl;
+      try { audioRef.current.play(); } catch {}
+    }
+  }, [streamUrl]);
 
   const saveProgress = async (position: number, dur: number, completed: boolean) => {
     try {
@@ -443,10 +474,20 @@ export default function EpisodeDetailPage({ params }: Props) {
               <ShareButton episodeId={params.id} podcastId={episode.podcast_id || undefined} title={title} variant="full" />
             </div>
 
-            {episode.audio_url && (
+            {loadingStream && (
+              <div className="mt-3 text-sm text-muted">Preparing your stream…</div>
+            )}
+
+            {upgradeRequired && (
+              <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+                Your current plan does not include this content. <Link href="/pricing" className="text-yellow-200 underline hover:opacity-90">Upgrade to continue</Link>.
+              </div>
+            )}
+
+            {streamUrl && (
               <audio
                 ref={audioRef}
-                src={episode.audio_url}
+                src={streamUrl}
                 controls
                 className={'w-full mt-4'}
                 onPlay={handleAudioPlay}
