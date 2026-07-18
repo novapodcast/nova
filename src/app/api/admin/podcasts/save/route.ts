@@ -49,6 +49,18 @@ export async function POST(request: NextRequest) {
     const finalTitleEn = titleEn || titleRw || 'Untitled';
     const finalTitleRw = titleRw || titleEn || 'Ntacyo yiswe';
 
+    // Resolve access_tier_id — default to Free tier if not provided
+    let accessTierId = body.access_tier_id || null;
+    if (!accessTierId) {
+      const { data: freeTier } = await clientForWrite
+        .from('pricing_tiers')
+        .select('id')
+        .eq('plan_name', 'Free')
+        .limit(1)
+        .single();
+      accessTierId = freeTier?.id || null;
+    }
+
     const writePayload: any = {
       title_en: finalTitleEn,
       title_rw: finalTitleRw,
@@ -58,7 +70,7 @@ export async function POST(request: NextRequest) {
       category_id: body.category_id || null,
       speaker_name: body.speaker_name || '',
       is_active: body.is_active ?? true,
-      access_tier_id: body.access_tier_id || null,
+      access_tier_id: accessTierId,
       slug: str(body.slug),
       status: body.status || 'published',
       scheduled_at: body.scheduled_at || null,

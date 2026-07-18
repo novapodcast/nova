@@ -236,7 +236,8 @@ export default function AdminPodcastsPage() {
 
   function startNew() {
     setEditingId(null);
-    setFormData(INITIAL_FORM_STATE);
+    const freeTier = pricingTiers.find(t => t.plan_name === 'Free');
+    setFormData({ ...INITIAL_FORM_STATE, access_tier_id: freeTier?.id || '' });
     setActiveLanguage(language === 'rw' ? 'rw' : 'en');
     setShowNewForm(true);
   }
@@ -549,7 +550,7 @@ export default function AdminPodcastsPage() {
                   onChange={(e) => setFormData({ ...formData, access_tier_id: e.target.value })}
                   className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg"
                 >
-                  <option value="">Select plan</option>
+                  {pricingTiers.length === 0 && <option value="">No tiers available</option>}
                   {pricingTiers.map((tier) => (
                     <option key={tier.id} value={tier.id}>
                       {tier.display_name_en} (Rank {tier.rank})
