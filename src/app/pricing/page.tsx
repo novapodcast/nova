@@ -176,9 +176,7 @@ export default function PricingPage() {
 
           const isAnnual = preferredTier.duration_months === 12;
           const monthlyEffective = isAnnual ? Math.round(preferredTier.price_rwf / 12) : preferredTier.price_rwf;
-          const savingsPercent = isAnnual && monthlyTier
-            ? calculateSavingsPercent(monthlyTier.price_rwf, preferredTier.price_rwf, preferredTier.duration_months)
-            : 0;
+          const annualTotal = isAnnual ? preferredTier.price_rwf : null;
 
           const marketingName: Record<string, string> = { Basic: 'Younger', Pro: 'Brave', Premium: 'Genius' };
 
@@ -218,9 +216,12 @@ export default function PricingPage() {
                       ? t('pricing.perMonth', language)
                       : `${preferredTier.duration_months} months`}
                 </p>
+                {isAnnual && annualTotal !== null && (
+                  <p className="text-xs text-muted mt-0.5">{formatPrice(annualTotal)} RWF total</p>
+                )}
                 {isAnnual && (
                   <p className="text-xs font-semibold mt-2 inline-block px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                    {savingsPercent > 0 ? `${savingsPercent}% ${t('pricing.annualDiscount', language)}` : t('pricing.annualDiscount', language)}
+                    {t('pricing.annualDiscount', language)}
                   </p>
                 )}
               </div>

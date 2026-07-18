@@ -33,59 +33,22 @@ export async function POST(request: NextRequest) {
       language = 'rw',
       duration_seconds = 0,
       completed = false,
-      session_id,
     } = body || {};
     if (!episode_id) {
       return NextResponse.json({ error: 'Missing episode_id' }, { status: 400 });
     }
 
     const userId = userRes.user.id;
-    const now = new Date().toISOString();
-
-    if (session_id) {
-      const { data: existing } = await supabase
-        .from('listens')
-        .select('id, total_duration_seconds, completed')
-        .eq('session_id', session_id)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (existing) {
-        const newDuration = (existing.total_duration_seconds || 0) + Math.max(0, Math.round(duration_seconds || 0));
-        const { error } = await supabase
-          .from('listens')
-          .update({
-            total_duration_seconds: newDuration,
-            completed: completed || existing.completed,
-            last_event_at: now,
-          })
-          .eq('id', existing.id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      } else {
-        const { error } = await supabase.from('listens').insert({
-          user_id: userId,
-          episode_id,
-          client,
-          language,
-          session_id,
-          total_duration_seconds: Math.max(0, Math.round(duration_seconds || 0)),
-          completed,
-          started_at: now,
-          last_event_at: now,
-        });
-        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-    } else {
-      const { error } = await supabase.from('listens').insert({
-        user_id: userId,
-        episode_id,
-        client,
-        language,
-        duration_seconds: Math.max(0, Math.round(duration_seconds || 0)),
-        completed,
-      });
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    }
+    // Simple append-only insert aligned with listens schema
+    const { error } = await supabase.from('listens').insert({
+      user_id: userId,
+      episode_id,
+      client,
+      language,
+      duration_seconds: Math.max(0, Math.round(duration_seconds || 0)),
+      completed,
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

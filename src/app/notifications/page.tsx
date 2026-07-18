@@ -7,6 +7,7 @@ export default function NotificationPreferencesPage() {
   const { language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [followCount, setFollowCount] = useState<number | null>(null);
   const [prefs, setPrefs] = useState({
     new_episodes: true,
     followed_podcasts_only: false,
@@ -41,6 +42,13 @@ export default function NotificationPreferencesPage() {
           });
         }
       }
+
+      // Load followed podcasts count for context
+      const { count } = await supabase
+        .from('podcast_follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id || '');
+      setFollowCount(typeof count === 'number' ? count : 0);
     } catch {
     } finally {
       setLoading(false);
@@ -93,6 +101,31 @@ export default function NotificationPreferencesPage() {
             ? 'Hitamo uko ushaka kumenyeshwa ibintu bishya kuri Nova'
             : 'Choose how you want to be notified about new content on Nova'}
         </p>
+
+        {/* Context: followed podcasts and push readiness */}
+        <div className="mb-6 space-y-3">
+          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm">
+            {followCount === 0 && (
+              <span>
+                {language === 'rw'
+                  ? 'Ntabwo urakurikira podcast. Kanda kuri “Kurikira” kuri podcasts ukunda kugira ngo uhabwe amakuru y’ibice bishya.'
+                  : 'You are not following any podcasts yet. Follow podcasts you like to get notified about new episodes.'}
+              </span>
+            )}
+            {typeof followCount === 'number' && followCount > 0 && (
+              <span>
+                {language === 'rw'
+                  ? `Ukurikira podcasts ${followCount}. Imenyesha “Podcast njyewe gusa” izakora kuri zo.`
+                  : `You follow ${followCount} podcasts. "Followed podcasts only" applies to them.`}
+              </span>
+            )}
+          </div>
+          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+            {language === 'rw'
+              ? 'Push notifications zirategurwa. Ubu imeri ziraboneka.'
+              : 'Push notifications are coming soon. Email notifications are available today.'}
+          </div>
+        </div>
 
         <div className="space-y-4">
           <ToggleRow
