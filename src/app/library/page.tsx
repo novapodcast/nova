@@ -204,8 +204,9 @@ export default function LibraryPage() {
             {continueItems.length === 0 ? (
               <EmptyState
                 icon="headphones"
-                title={language === 'rw' ? 'Nta gice kiri kumvikano' : 'No episodes in progress'}
-                description={language === 'rw' ? 'Tangira kumva amakuru yigitangaza ukore progress yawe' : 'Start listening to podcasts and your progress will appear here'}
+                language={language}
+                title={language === 'rw' ? 'Nta gice urimo kumva.' : 'No episodes in progress'}
+                description={language === 'rw' ? 'Tangira kumva podikasiti, hanyuma aho ugeze hazajya hgaragara hano.' : 'Start listening to podcasts and your progress will appear here'}
               />
             ) : (
               continueItems.map((item) => {
@@ -260,6 +261,7 @@ export default function LibraryPage() {
             {recentItems.length === 0 ? (
               <EmptyState
                 icon="clock"
+                language={language}
                 title={language === 'rw' ? 'Nta makuru yumvwe' : 'No listening history yet'}
                 description={language === 'rw' ? 'Tangira kumva amakuru yigitangaza' : 'Start listening to podcasts to build your history'}
               />
@@ -306,6 +308,7 @@ export default function LibraryPage() {
             {favorites.length === 0 ? (
               <EmptyState
                 icon="heart"
+                language={language}
                 title={language === 'rw' ? 'Nta gice cyo gukunda' : 'No favorites yet'}
                 description={language === 'rw' ? 'Kanda ku kibuno cyo kugirishwa ugere ku gice cyo gukunda' : 'Tap the heart icon on episodes to save them here'}
               />
@@ -350,7 +353,7 @@ export default function LibraryPage() {
   );
 }
 
-function EmptyState({ icon, title, description }: { icon: string; title: string; description: string }) {
+function EmptyState({ icon, title, description, language }: { icon: string; title: string; description: string; language: string }) {
   const icons: Record<string, React.ReactNode> = {
     headphones: (
       <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -380,7 +383,7 @@ function EmptyState({ icon, title, description }: { icon: string; title: string;
         href="/"
         className="inline-block mt-6 px-6 py-2.5 bg-primary text-black font-medium rounded-lg hover:opacity-90 transition"
       >
-        Browse Podcasts
+        {language === 'rw' ? 'Reba Podikasiti' : 'Browse Podcasts'}
       </Link>
     </div>
   );
