@@ -157,18 +157,18 @@ export default function LibraryPage() {
 
   const tabs: { id: Tab; label: string; labelRw: string; count: number }[] = [
     { id: 'continue', label: 'Continue Listening', labelRw: 'Komeza Kumva', count: continueItems.length },
-    { id: 'recent', label: 'Recently Played', labelRw: 'Byumvwe Bigeze', count: recentItems.length },
-    { id: 'favorites', label: 'Favorites', labelRw: 'Ibyizewe', count: favorites.length },
+    { id: 'recent', label: 'Recently Played', labelRw: 'Ibyumviswe Vuba', count: recentItems.length },
+    { id: 'favorites', label: 'Favorites', labelRw: 'Ibyo Ukunda', count: favorites.length },
   ];
 
   return (
     <div className="container py-12 md:py-16">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-2">
-          {language === 'rw' ? 'Umwugakoro wanjye' : 'Your Library'}
+          {language === 'rw' ? 'Isomero Ryawe' : 'Your Library'}
         </h1>
         <p className="text-muted mb-8">
-          {language === 'rw' ? 'Ibintu byawe byumvikano, ibyizewe nibyo ukomeje kumva' : 'Your listening history, favorites, and episodes in progress'}
+          {language === 'rw' ? "Amateka y'ibyo wumvise, ibyo ukunda, n'ibice ukomeje kumva." : 'Your listening history, favorites, and episodes in progress'}
         </p>
 
         {/* Tabs */}
@@ -306,8 +306,8 @@ export default function LibraryPage() {
             {favorites.length === 0 ? (
               <EmptyState
                 icon="heart"
-                title={language === 'rw' ? 'Nta gice kizewe' : 'No favorites yet'}
-                description={language === 'rw' ? 'Kanda ku kibuno cyo kugirishwa ugere ku gice cyizewe' : 'Tap the heart icon on episodes to save them here'}
+                title={language === 'rw' ? 'Nta gice cyo gukunda' : 'No favorites yet'}
+                description={language === 'rw' ? 'Kanda ku kibuno cyo kugirishwa ugere ku gice cyo gukunda' : 'Tap the heart icon on episodes to save them here'}
               />
             ) : (
               favorites.map((item) => {

@@ -67,7 +67,7 @@ function Header() {
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted">
           <Link href="/podcasts" className="hover:text-white">{t('nav.podcasts', language)}</Link>
           <Link href="/search" className="hover:text-white">{language === 'rw' ? 'Shakisha' : 'Search'}</Link>
-          <Link href="/library" className="hover:text-white">{language === 'rw' ? 'Umwugakoro' : 'Library'}</Link>
+          <Link href="/library" className="hover:text-white">{language === 'rw' ? 'Isomero' : 'Library'}</Link>
           <Link href="/pricing" className="hover:text-white">{t('nav.pricing', language)}</Link>
           <Link href="/about" className="hover:text-white">{t('nav.about', language)}</Link>
           <LanguageSwitcher />
@@ -117,7 +117,7 @@ function Header() {
                 {language === 'rw' ? 'Shakisha' : 'Search'}
               </Link>
               <Link href="/library" className="hover:text-white" onClick={() => setMobileOpen(false)}>
-                {language === 'rw' ? 'Umwugakoro' : 'Library'}
+                {language === 'rw' ? 'Isomero' : 'Library'}
               </Link>
               <Link href="/pricing" className="hover:text-white" onClick={() => setMobileOpen(false)}>
                 {t('nav.pricing', language)}

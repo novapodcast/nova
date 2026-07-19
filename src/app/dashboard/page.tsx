@@ -265,7 +265,7 @@ export default function DashboardPage() {
           <div className="text-sm text-muted mb-2">{t('dashboard.favorites', language)}</div>
           <div className="text-xl font-semibold mb-3">{favorites.length} {t('common.episodes', language)}</div>
           <div className="flex gap-4">
-            <Link href="/library" className="text-sm text-primary hover:underline">{language === 'rw' ? 'Umwugakoro' : 'Library'}</Link>
+            <Link href="/library" className="text-sm text-primary hover:underline">{language === 'rw' ? 'Isomero' : 'Library'}</Link>
             <Link href="/notifications" className="text-sm text-primary hover:underline">{language === 'rw' ? 'Imenyabintu' : 'Notifications'}</Link>
           </div>
         </div>
