@@ -177,11 +177,15 @@ export async function GET(request: NextRequest) {
     let dailyListens: Array<{ date: string; listens: number }> = [];
     try {
       // Count listens grouped by episode within date window
-      const { data: listenRows } = await clientForRead
-        .from('listens')
+      const { data: listenRows, error: listensError } = await clientForRead
+        .from('playback_events')
         .select('episode_id, created_at')
+        .eq('event_type', 'episode_started')
+        .not('episode_id', 'is', null)
         .gte('created_at', startISO)
         .lte('created_at', endISO);
+
+      if (listensError) throw listensError;
 
       const byEpisode = new Map<string, number>();
       const byDate = new Map<string, number>();
