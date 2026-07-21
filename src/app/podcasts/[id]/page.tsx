@@ -5,9 +5,11 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchPublicPodcastByIdOrSlug } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { t } from '@/lib/i18n';
 import FollowButton from '@/components/FollowButton';
 import ShareButton from '@/components/ShareButton';
 import FavoriteButton from '@/components/FavoriteButton';
+import { useResumePlayback } from '@/lib/useResumePlayback';
 
 interface Podcast {
   id: string;
@@ -49,6 +51,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { onLoadedMetadata: onLoadedMetadataResume } = useResumePlayback(currentEpisode?.id);
 
   useEffect(() => {
     const load = async () => {
@@ -256,23 +259,23 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
     return (
       <div className="container py-12 md:py-16">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-2xl font-bold mb-4">Podcast not found</h1>
+          <h1 className="text-2xl font-bold mb-4">{t('podcasts.notFound', language)}</h1>
           <Link href="/podcasts" className="inline-block px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
-            Back to Podcasts
+            {t('podcasts.backToPodcasts', language)}
           </Link>
         </div>
       </div>
     );
   }
 
-  const title = (language === 'rw' ? podcast.title_rw : podcast.title_en) || podcast.title_en || podcast.title_rw || 'Untitled';
+  const title = (language === 'rw' ? podcast.title_rw : podcast.title_en) || podcast.title_en || podcast.title_rw || t('common.untitled', language);
   const description = (language === 'rw' ? podcast.description_rw : podcast.description_en) || '';
 
   return (
     <div className="container py-12 md:py-16">
       <div className="max-w-4xl mx-auto">
         <Link href="/podcasts" className="inline-flex items-center text-sm text-muted hover:text-white mb-6 transition">
-          ← {language === 'rw' ? 'Subira ku Podikasti' : 'Back to Podcasts'}
+          ← {t('podcasts.backToPodcasts', language)}
         </Link>
 
         <div className="grid md:grid-cols-[300px_1fr] gap-8 mb-10">
@@ -286,7 +289,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                 className="object-cover"
               />
             ) : (
-              <div className="h-full flex items-center justify-center text-muted">Cover coming soon</div>
+              <div className="h-full flex items-center justify-center text-muted">{t('podcasts.coverComingSoon', language)}</div>
             )}
           </div>
 
@@ -295,7 +298,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
             {podcast.speaker_name && (
               <div className="text-primary font-semibold mb-4">{podcast.speaker_name}</div>
             )}
-            
+
             {/* Podcast statistics */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm mb-5">
               <div className="flex items-center gap-2">
@@ -303,7 +306,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
                 <span className="text-white font-medium">{episodes.length}</span>
-                <span className="text-muted">{language === 'rw' ? 'ibice' : 'Episodes'}</span>
+                <span className="text-muted">{t('podcasts.episodesCount', language)}</span>
               </div>
               {(podcast.total_listeners ?? 0) > 0 && (
                 <div className="flex items-center gap-2">
@@ -312,7 +315,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                   <span className="text-white font-medium">{formatCount(podcast.total_listeners)}</span>
-                  <span className="text-muted">{language === 'rw' ? 'abumva' : 'Plays'}</span>
+                  <span className="text-muted">{t('podcasts.plays', language)}</span>
                 </div>
               )}
               {podcast.updated_at && (
@@ -320,7 +323,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>{language === 'rw' ? 'Byavuguruwe' : 'Updated'} {formatTimeAgo(podcast.updated_at)}</span>
+                  <span>{t('podcasts.updated', language)} {formatTimeAgo(podcast.updated_at)}</span>
                 </div>
               )}
             </div>
@@ -339,14 +342,14 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
 
         <div>
           <h2 className="text-2xl font-bold mb-6">
-            {language === 'rw' ? 'Ibice' : 'Episodes'}
+            {t('podcasts.episodes', language)}
           </h2>
 
           {episodes.length === 0 && (
             <div className="text-center py-12 bg-[var(--surface)] rounded-xl ring-1 ring-white/5">
               <div className="text-4xl mb-3">🎙️</div>
               <p className="text-muted">
-                {language === 'rw' ? 'Nta bice biboneka kuri iyi podikasti.' : 'No episodes available for this podcast yet.'}
+                {t('podcasts.noEpisodes', language)}
               </p>
             </div>
           )}
@@ -354,7 +357,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
           {episodes.length > 0 && (
             <div className="space-y-2">
               {episodes.map((ep, idx) => {
-                const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || ep.title_rw || 'Untitled';
+                const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || ep.title_rw || t('common.untitled', language);
                 const epDesc = (language === 'rw' ? ep.description_rw : ep.description_en) || '';
                 const isCurrentEpisode = currentEpisode?.id === ep.id;
                 const episodeNum = ep.episode_number ?? idx + 1;
@@ -395,7 +398,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-xs font-medium text-primary">
-                          {language === 'rw' ? `Igice ${episodeNum}` : `Episode ${episodeNum}`}
+                          {t('podcasts.episodeNumber', language, { num: episodeNum })}
                         </span>
                         {ep.published_at && (
                           <>
@@ -426,7 +429,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                           </span>
                         )}
                         {!ep.audio_url && (
-                          <span className="text-amber-500/80">{language === 'rw' ? 'Ntabwo iboneka' : 'Coming soon'}</span>
+                          <span className="text-amber-500/80">{t('podcasts.comingSoon', language)}</span>
                         )}
                       </div>
                     </div>
@@ -435,7 +438,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                     <Link
                       href={`/episodes/${ep.id}`}
                       className="self-center p-2 rounded-lg text-muted hover:text-white hover:bg-white/5 transition"
-                      title={language === 'rw' ? 'Reba byose' : 'View details'}
+                      title={t('podcasts.viewDetails', language)}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -460,12 +463,10 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                 </svg>
               </div>
               <h3 className="text-lg font-bold text-white mb-2">
-                {language === 'rw' ? 'Iyi gice kirisaba gushyura' : 'This episode requires a higher plan'}
+                {t('podcasts.requiresHigherPlan', language)}
               </h3>
               <p className="text-sm text-muted mb-4">
-                {language === 'rw'
-                  ? 'Iyi gice kiri mu giciro kingana na ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.content_tier_rank] + '. Ushyura muri ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.user_tier_rank] + '.'
-                  : 'This content is on the ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.content_tier_rank] + ' plan. You are on the ' + ['Free', 'Basic', 'Pro', 'Premium'][upgradeRequired.user_tier_rank] + ' plan.'}
+                {t('podcasts.upgradePrompt', language)}
               </p>
               <div className="flex gap-3 justify-center">
                 <Link
@@ -473,13 +474,13 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                   onClick={() => trackPlaybackEvent('upgrade_clicked', { upgrade_converted: true })}
                   className="px-6 py-2.5 bg-primary text-black font-semibold rounded-lg hover:opacity-90 transition"
                 >
-                  {language === 'rw' ? 'Iyandikishe' : 'Upgrade Plan'}
+                  {t('podcasts.upgradePlan', language)}
                 </Link>
                 <button
                   onClick={() => { setUpgradeRequired(null); setCurrentEpisode(null); }}
                   className="px-6 py-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
                 >
-                  {language === 'rw' ? 'Komeza kureba' : 'Browse other episodes'}
+                  {t('podcasts.browseOtherEpisodes', language)}
                 </button>
               </div>
             </div>
@@ -494,7 +495,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
             <div className="flex items-center gap-3 justify-center">
               <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <span className="text-sm text-muted">
-                {language === 'rw' ? 'Birategura…' : 'Loading stream…'}
+                {t('podcasts.loadingStream', language)}
               </span>
             </div>
           </div>
@@ -508,6 +509,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
         onEnded={() => setIsPlaying(false)}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
+        onLoadedMetadata={onLoadedMetadataResume}
       />
 
       {/* Sticky audio player */}
@@ -539,7 +541,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
               {/* Episode info */}
               <div className="flex-1 min-w-0 hidden sm:block">
                 <p className="text-sm font-medium text-white truncate">
-                  {(language === 'rw' ? currentEpisode.title_rw : currentEpisode.title_en) || currentEpisode.title_en || 'Now Playing'}
+                  {(language === 'rw' ? currentEpisode.title_rw : currentEpisode.title_en) || currentEpisode.title_en || t('podcasts.nowPlaying', language)}
                 </p>
                 <p className="text-xs text-muted truncate">{title}</p>
               </div>

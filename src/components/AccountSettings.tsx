@@ -483,7 +483,7 @@ export default function AccountSettings() {
                   {subscription.plan_name || (subscription.status === 'active' ? t('profile.active', language) : t('profile.inactive', language))}
                 </div>
                 <div className="text-sm text-muted mb-6">
-                  {t('profile.status', language)}: <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{subscription.status}</span>
+                  {t('profile.status', language)}: <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{t(`dashboard.status${subscription.status.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('')}`, language)}</span>
                 </div>
                 {subscription.expires_at && (
                   <div className="text-sm text-muted mb-6">

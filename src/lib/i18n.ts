@@ -35,6 +35,13 @@ export const translations = {
       loading: 'Birimo gutegurwa...',
       episode: 'Igice',
       untitled: 'Nta zina',
+      notFound: 'Igice nticyabonetse cyangwa ntikiboneka.',
+      backToPodcast: 'Subira ku Podikasti',
+      listenNow: 'Kumva None',
+      preparingStream: 'Tegura iyumvikano…',
+      upgradeRequired: 'Gahunda yawe igenzura ibiri kuri iki gice. Ihindure gahunda kugira ngo ukomeze.',
+      upgradeLink: 'Ihindure gahunda kugira ngo ukomeze',
+      relatedEpisodes: 'Ibice bifa',
     },
     
     
@@ -160,8 +167,78 @@ export const translations = {
       unlocked: 'Byafunguwe',
       locked: 'Bifunze',
       noRecommendations: 'Hakora ibice byo kumva kugira ngo ubone ibyakwifuzwa.',
+      // Subscription status
+      statusActive: 'Kirakora',
+      statusInactive: 'Ntibirakora',
+      statusExpired: 'Byarengeye igihe',
+      statusCancelled: 'Byahagaritswe',
+      statusPastDue: 'Harenze igihe cy\'ubwishyu',
+      statusTrialing: 'Igihe cy\'ibigeragezo',
+      // Recommendation group titles (server returns titleKey)
+      recBecauseYouListened: 'Kubera ko wumvise {{name}}',
+      recNewFromFollows: 'Ibice bishya kuvukora ukurikirana',
+      recTrendingCategory: 'Bikunzwe mu cyiciro cyibanzwe',
+      recLatestEpisodes: 'Ibice byaheruka',
+      // Structured insights (server returns { type, params })
+      insight: {
+        weekly_growth: 'Wumvise byiyongereyeho {{percentage}}% mu cyumweru gishize.',
+        weekly_decline: 'Wumvise byagabanyijeho {{percentage}}% mu cyumweru gishize.',
+        welcome_back: 'Wongeye kumva mu cyumweru — murakaza neza!',
+        monthly_completion_up: 'Wangije ibice {{count}} byiyongereye ukugereranya n\'ukwezi gushize.',
+        monthly_completion_down: 'Wangije ibice {{count}} byagabanyijwe ukugereranya n\'ukwezi gushize.',
+        monthly_completion_first: 'Wangije ibice {{count}} mu kwezi kwose!',
+        streak_gap: 'Ugasigaranye iminsi {{gap}} kugira ngo ugere ku ndunduro yawe y\'iminsi {{best}}.',
+        streak_matching: 'Ugereranya n\'indunduro yawe y\'amateka — iminsi {{current}}!',
+        listening_pattern: 'Ukimara kumva mu {{when}} mu {{period}}.',
+        completion_low: 'Watangiye ibice {{started}} ariko wangije {{completed}} gusa. Gerageza ibice byoroheje!',
+      },
+      // Time-of-day + day-type tokens used by listening_pattern insight
+      weekdays: 'mu minsi y\'akazi',
+      weekends: 'mu minsi y\'ipetero',
     },
-    
+
+    // Podcast detail page
+    podcasts: {
+      notFound: 'Podikasti ntabwo iboneka',
+      backToPodcasts: 'Subira ku Podikasti',
+      episodes: 'Ibice',
+      noEpisodes: 'Nta bice biboneka kuri iyi podikasti.',
+      episodeNumber: 'Igice {{num}}',
+      comingSoon: 'Ntabwo iboneka',
+      viewDetails: 'Reba byose',
+      requiresHigherPlan: 'Iyi gice kirisaba gahunda irenze iyawe',
+      upgradePrompt: 'Gahunda yawe ntigizemo ibiri kuri iyi gice.',
+      upgradePlan: 'Iyandikishe',
+      browseOtherEpisodes: 'Komeza kureba',
+      loadingStream: 'Birategura…',
+      nowPlaying: 'Birimo gukina',
+      coverComingSoon: 'Ifoto iri ku nzira',
+      updated: 'Byavuguruwe',
+      plays: 'Abumva',
+      episodesCount: 'ibice',
+    },
+
+    // Billing pages
+    billing: {
+      title: 'Ibyo wishyurwa',
+      currentPlan: 'Gahunda Kuri Ubu',
+      active: 'Kirakora',
+      inactive: 'Ntibirakora',
+      renews: 'Bizongera:',
+      changePlan: 'Hindura gahunda',
+      noActivePlan: 'Nta gahunda ikora',
+      browsePlans: 'Reba gahunda',
+      paymentHistory: 'Amateka y\'ubwishyu',
+      noPayments: 'Nta bwishyu bwakozwe.',
+      receipt: 'Icyemezo',
+      history: 'Amateka y\'ubwishyu',
+      recentPayments: 'Ubwishyu bwawe bwaherukanye',
+      noPaymentsFound: 'Nta bwishyu bwabonetse.',
+      subscriptionPayment: 'Ubwishyu bw\'iyandikishe',
+      loading: 'Birimo gutegurwa…',
+      getStarted: 'Tangira',
+    },
+
     // Admin
     admin: {
       title: 'Ubuyobozi',
@@ -287,6 +364,9 @@ export const translations = {
       months: 'amezi',
       viewDashboard: 'Reba ibiro',
       tryAgain: 'Ongera ugerageze',
+      untitled: 'Nta zina',
+      plays: 'imikino',
+      billing: 'Ibyo wishyurwa',
     },
   },
   
@@ -323,8 +403,15 @@ export const translations = {
       loading: 'Loading...',
       episode: 'Episode',
       untitled: 'Untitled',
+      notFound: 'Episode not found or unavailable.',
+      backToPodcast: 'Back to Podcast',
+      listenNow: 'Listen Now',
+      preparingStream: 'Preparing your stream…',
+      upgradeRequired: 'Your current plan does not include this content. Upgrade to continue.',
+      upgradeLink: 'Upgrade to continue',
+      relatedEpisodes: 'Related Episodes',
     },
-    
+
     // Pricing
     pricing: {
       title: 'Simple, Transparent Pricing',
@@ -447,8 +534,78 @@ export const translations = {
       unlocked: 'Unlocked',
       locked: 'Locked',
       noRecommendations: 'Listen to a few episodes to get personalized recommendations.',
+      // Subscription status
+      statusActive: 'Active',
+      statusInactive: 'Inactive',
+      statusExpired: 'Expired',
+      statusCancelled: 'Cancelled',
+      statusPastDue: 'Past due',
+      statusTrialing: 'Trialing',
+      // Recommendation group titles (server returns titleKey)
+      recBecauseYouListened: 'Because you listened to {{name}}',
+      recNewFromFollows: 'New from creators you follow',
+      recTrendingCategory: 'Trending in your favorite category',
+      recLatestEpisodes: 'Latest episodes',
+      // Structured insights (server returns { type, params })
+      insight: {
+        weekly_growth: 'You listened {{percentage}}% more than last week.',
+        weekly_decline: 'You listened {{percentage}}% less than last week.',
+        welcome_back: 'You started listening again this week — welcome back!',
+        monthly_completion_up: 'You completed {{count}} more episode(s) than last month.',
+        monthly_completion_down: 'You completed {{count}} fewer episode(s) than last month.',
+        monthly_completion_first: 'You completed {{count}} episode(s) this month!',
+        streak_gap: 'You\'re only {{gap}} day(s) away from your best streak of {{best}} days.',
+        streak_matching: 'You\'re matching your best streak ever — {{current}} day(s)!',
+        listening_pattern: 'You usually listen on {{when}} during the {{period}}.',
+        completion_low: 'You\'ve started {{started}} episodes but only finished {{completed}}. Try shorter episodes!',
+      },
+      // Time-of-day + day-type tokens used by listening_pattern insight
+      weekdays: 'weekdays',
+      weekends: 'weekends',
     },
-    
+
+    // Podcast detail page
+    podcasts: {
+      notFound: 'Podcast not found',
+      backToPodcasts: 'Back to Podcasts',
+      episodes: 'Episodes',
+      noEpisodes: 'No episodes available for this podcast yet.',
+      episodeNumber: 'Episode {{num}}',
+      comingSoon: 'Coming soon',
+      viewDetails: 'View details',
+      requiresHigherPlan: 'This episode requires a higher plan',
+      upgradePrompt: 'Your current plan does not include this content.',
+      upgradePlan: 'Upgrade Plan',
+      browseOtherEpisodes: 'Browse other episodes',
+      loadingStream: 'Loading stream…',
+      nowPlaying: 'Now Playing',
+      coverComingSoon: 'Cover coming soon',
+      updated: 'Updated',
+      plays: 'Plays',
+      episodesCount: 'Episodes',
+    },
+
+    // Billing pages
+    billing: {
+      title: 'Billing',
+      currentPlan: 'Current Plan',
+      active: 'Active',
+      inactive: 'Inactive',
+      renews: 'Renews:',
+      changePlan: 'Change plan',
+      noActivePlan: 'No active plan',
+      browsePlans: 'Browse plans',
+      paymentHistory: 'Payment History',
+      noPayments: 'No payments yet.',
+      receipt: 'Receipt',
+      history: 'Billing History',
+      recentPayments: 'Your recent payments',
+      noPaymentsFound: 'No payments found.',
+      subscriptionPayment: 'Subscription payment',
+      loading: 'Loading…',
+      getStarted: 'Get Started',
+    },
+
     // Admin
     admin: {
       title: 'Admin Dashboard',
@@ -574,6 +731,9 @@ export const translations = {
       months: 'months',
       viewDashboard: 'View dashboard',
       tryAgain: 'Try again',
+      untitled: 'Untitled',
+      plays: 'plays',
+      billing: 'Billing',
     },
   },
 };
@@ -602,6 +762,34 @@ export function t(key: string, lang: 'en' | 'rw' = 'en', params?: Record<string,
   }
   
   return value;
+}
+
+/**
+ * Resolve a structured insight object (returned by /api/analytics/user) into a
+ * localized, human-readable string. The server returns objects of the form
+ * { type: string, params?: Record<string, any> } so the client can translate
+ * them with the existing i18n system instead of receiving English sentences.
+ *
+ * Unknown insight types fall back to the type key (never throw).
+ */
+export function renderInsight(
+  insight: { type: string; params?: Record<string, any> },
+  lang: 'en' | 'rw' = 'en'
+): string {
+  const params: Record<string, any> = { ...(insight.params || {}) };
+
+  // The listening_pattern insight references time-of-day (period) and a
+  // weekday/weekend token. Translate both before substitution.
+  if (insight.type === 'listening_pattern') {
+    if (typeof params.period === 'string') {
+      params.period = t(`dashboard.${params.period}`, lang);
+    }
+    if (typeof params.when === 'string') {
+      params.when = t(`dashboard.${params.when}`, lang);
+    }
+  }
+
+  return t(`dashboard.insight.${insight.type}`, lang, params);
 }
 
 // Language context type

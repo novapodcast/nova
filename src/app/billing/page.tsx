@@ -66,37 +66,39 @@ export default function BillingPage() {
     );
   }
 
+  const statusKey = (status: string) => `billing.${status === 'active' ? 'active' : 'inactive'}`;
+
   return (
     <div className="container py-12 md:py-16 max-w-3xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Billing</h1>
+        <h1 className="text-3xl font-bold">{t('billing.title', language)}</h1>
         <Link href="/dashboard" className="text-sm text-primary hover:underline">{t('common.viewDashboard', language)}</Link>
       </div>
 
       <div className="bg-[var(--surface)] rounded-xl p-5 ring-1 ring-white/5 mb-8">
-        <div className="text-sm text-muted mb-2">Current Plan</div>
+        <div className="text-sm text-muted mb-2">{t('billing.currentPlan', language)}</div>
         {subscription ? (
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xl font-semibold">{subscription.status === 'active' ? 'Active' : 'Inactive'}</div>
+              <div className="text-xl font-semibold">{t(statusKey(subscription.status), language)}</div>
               {subscription.expires_at && (
-                <div className="text-sm text-muted">Renews: {new Date(subscription.expires_at).toLocaleDateString()}</div>
+                <div className="text-sm text-muted">{t('billing.renews', language)} {new Date(subscription.expires_at).toLocaleDateString()}</div>
               )}
             </div>
-            <Link href="/pricing" className="text-sm text-primary hover:underline">Change plan</Link>
+            <Link href="/pricing" className="text-sm text-primary hover:underline">{t('billing.changePlan', language)}</Link>
           </div>
         ) : (
           <div>
-            <div className="text-xl font-semibold">No active plan</div>
-            <Link href="/pricing" className="text-sm text-primary hover:underline">Browse plans</Link>
+            <div className="text-xl font-semibold">{t('billing.noActivePlan', language)}</div>
+            <Link href="/pricing" className="text-sm text-primary hover:underline">{t('billing.browsePlans', language)}</Link>
           </div>
         )}
       </div>
 
       <div>
-        <h2 className="text-xl font-bold mb-4">Payment History</h2>
+        <h2 className="text-xl font-bold mb-4">{t('billing.paymentHistory', language)}</h2>
         {payments.length === 0 && (
-          <div className="text-muted">No payments yet.</div>
+          <div className="text-muted">{t('billing.noPayments', language)}</div>
         )}
         {payments.length > 0 && (
           <div className="space-y-3">
@@ -108,7 +110,7 @@ export default function BillingPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={`text-xs ${p.status === 'succeeded' ? 'text-green-400' : p.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}`}>{p.status}</span>
-                  <Link href={`/receipts/${p.transaction_id}`} className="text-sm text-primary hover:underline">Receipt</Link>
+                  <Link href={`/receipts/${p.transaction_id}`} className="text-sm text-primary hover:underline">{t('billing.receipt', language)}</Link>
                 </div>
               </div>
             ))}

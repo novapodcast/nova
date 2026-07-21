@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const [
       totalProgressRes, episodesCompletedRes, historyRes, completedRowsRes,
       continueRes, activityRes, topContentRes, episodesStartedRes,
-      lifetimeProgressRes, weekActivityRes,
+      listensRes, weekActivityRes,
     ] = await Promise.all([
       userClient.from('listening_progress').select('*', { count: 'exact', head: true }).eq('user_id', userId),
       userClient.from('listening_progress').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('completed', true),
@@ -65,9 +65,13 @@ export async function GET(request: NextRequest) {
         .select('podcast_id, created_at, podcasts!inner(id, title_en, title_rw, cover_image_url, speaker_name, category_id)')
         .eq('user_id', userId).eq('event_type', 'episode_started').not('podcast_id', 'is', null).gte('created_at', since90Days.toISOString()).limit(500),
       userClient.from('playback_events').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('event_type', 'episode_started'),
-      userClient.from('listening_progress').select('position_seconds, last_listened_at').eq('user_id', userId),
+      // Canonical source for actual listening duration
+      userClient.from('listens').select('duration_seconds, created_at').eq('user_id', userId).gte('created_at', since14Days.toISOString()).limit(2000),
       userClient.from('playback_events').select('created_at, event_type, position_seconds').eq('user_id', userId).eq('event_type', 'episode_started').gte('created_at', since14Days.toISOString()),
     ]);
+
+    // --- Listen duration rows (canonical source: listens table) ---
+    const listenRows = (listensRes.data || []) as any[];
 
     // --- Completion metrics ---
     const totalProgress = totalProgressRes.count || 0;
@@ -141,29 +145,40 @@ export async function GET(request: NextRequest) {
       prevDate = d;
     }
 
-    // --- Minutes by period ---
-    const todaySeconds = startedEvents
-      .filter((e) => new Date(e.created_at) >= todayStart)
-      .reduce((sum, e) => sum + (e.position_seconds || 0), 0);
-    const minutesToday = Math.round(todaySeconds / 60);
+    // --- Minutes by period (from listens table — actual listening duration) ---
+    const todayListenSeconds = listenRows
+      .filter((r) => new Date(r.created_at) >= todayStart)
+      .reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+    const minutesToday = Math.round(todayListenSeconds / 60);
 
-    const weekEvents = (weekActivityRes.data || []) as any[];
-    const thisWeekSeconds = weekEvents
-      .filter((e) => new Date(e.created_at) >= since7Days)
-      .reduce((sum, e) => sum + (e.position_seconds || 0), 0);
-    const lastWeekSeconds = weekEvents
-      .filter((e) => { const d = new Date(e.created_at); return d >= since14Days && d < since7Days; })
-      .reduce((sum, e) => sum + (e.position_seconds || 0), 0);
-    const minutesThisWeek = Math.round(thisWeekSeconds / 60);
+    const thisWeekListenSeconds = listenRows
+      .filter((r) => new Date(r.created_at) >= since7Days)
+      .reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+    const lastWeekListenSeconds = listenRows
+      .filter((r) => { const d = new Date(r.created_at); return d >= since14Days && d < since7Days; })
+      .reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+    const minutesThisWeek = Math.round(thisWeekListenSeconds / 60);
 
-    const monthSeconds = (lifetimeProgressRes.data || [])
-      .filter((r: any) => r.last_listened_at && new Date(r.last_listened_at) >= monthStart)
-      .reduce((sum: number, r: any) => sum + (r.position_seconds || 0), 0);
-    const minutesThisMonth = Math.round(monthSeconds / 60);
+    // Fetch all-time listens for accurate month/lifetime totals
+    const { data: allListensData } = await userClient
+      .from('listens')
+      .select('duration_seconds, created_at')
+      .eq('user_id', userId)
+      .limit(5000);
 
-    const lifetimeSeconds = (lifetimeProgressRes.data || [])
-      .reduce((sum: number, r: any) => sum + (r.position_seconds || 0), 0);
-    const minutesLifetime = Math.round(lifetimeSeconds / 60);
+    const allListenRows = (allListensData || []) as any[];
+    const monthListenSeconds = allListenRows
+      .filter((r) => new Date(r.created_at) >= monthStart)
+      .reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+    const minutesThisMonth = Math.round(monthListenSeconds / 60);
+
+    const lifetimeListenSeconds = allListenRows
+      .reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+    const minutesLifetime = Math.round(lifetimeListenSeconds / 60);
+
+    // Use listen durations for week comparison (insights)
+    const thisWeekSeconds = thisWeekListenSeconds;
+    const lastWeekSeconds = lastWeekListenSeconds;
 
     // --- Weekly activity (last 7 days) ---
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -175,7 +190,9 @@ export async function GET(request: NextRequest) {
       weeklyActivity.push({
         day: dayLabels[d.getDay()],
         count: dayEvents.length,
-        minutes: Math.round(dayEvents.reduce((sum, e) => sum + (e.position_seconds || 0), 0) / 60),
+        minutes: Math.round(listenRows
+          .filter((r) => new Date(r.created_at).toISOString().slice(0, 10) === dateStr)
+          .reduce((sum, r) => sum + (r.duration_seconds || 0), 0) / 60),
       });
     }
 
@@ -282,37 +299,37 @@ export async function GET(request: NextRequest) {
         completed_at: r.last_listened_at,
       }));
 
-    // --- Generate insights ---
-    const insights: string[] = [];
+    // --- Generate insights (structured for client-side localization) ---
+    const insights: { type: string; params?: Record<string, any> }[] = [];
     if (lastWeekSeconds > 0 && thisWeekSeconds > 0) {
       const pct = Math.round(((thisWeekSeconds - lastWeekSeconds) / lastWeekSeconds) * 100);
-      if (pct > 0) insights.push(`You listened ${pct}% more than last week.`);
-      else if (pct < 0) insights.push(`You listened ${Math.abs(pct)}% less than last week.`);
+      if (pct > 0) insights.push({ type: 'weekly_growth', params: { percentage: pct } });
+      else if (pct < 0) insights.push({ type: 'weekly_decline', params: { percentage: Math.abs(pct) } });
     } else if (thisWeekSeconds > 0 && lastWeekSeconds === 0) {
-      insights.push(`You started listening again this week — welcome back!`);
+      insights.push({ type: 'welcome_back' });
     }
     const thisMonthCompleted = (completedRowsRes.data || []).filter((r: any) => new Date(r.last_listened_at) >= monthStart).length;
     const lastMonthCompleted = (completedRowsRes.data || []).filter((r: any) => { const d = new Date(r.last_listened_at); return d >= lastMonthStart && d < monthStart; }).length;
     if (lastMonthCompleted > 0) {
       const diff = thisMonthCompleted - lastMonthCompleted;
-      if (diff > 0) insights.push(`You completed ${diff} more episode${diff > 1 ? 's' : ''} than last month.`);
-      else if (diff < 0) insights.push(`You completed ${Math.abs(diff)} fewer episode${Math.abs(diff) > 1 ? 's' : ''} than last month.`);
+      if (diff > 0) insights.push({ type: 'monthly_completion_up', params: { count: diff } });
+      else if (diff < 0) insights.push({ type: 'monthly_completion_down', params: { count: Math.abs(diff) } });
     } else if (thisMonthCompleted > 0) {
-      insights.push(`You completed ${thisMonthCompleted} episode${thisMonthCompleted > 1 ? 's' : ''} this month!`);
+      insights.push({ type: 'monthly_completion_first', params: { count: thisMonthCompleted } });
     }
     if (currentStreak > 0 && longestStreak > currentStreak) {
       const gap = longestStreak - currentStreak;
-      insights.push(`You're only ${gap} day${gap > 1 ? 's' : ''} away from your best streak of ${longestStreak} days.`);
+      insights.push({ type: 'streak_gap', params: { gap, best: longestStreak } });
     } else if (currentStreak > 0 && currentStreak === longestStreak) {
-      insights.push(`You're matching your best streak ever — ${currentStreak} day${currentStreak > 1 ? 's' : ''}!`);
+      insights.push({ type: 'streak_matching', params: { current: currentStreak } });
     }
     const topPattern = listeningPattern[0];
     if (topPattern && topPattern.count > 0 && favoriteDay) {
       const isWeekend = favoriteDay === 'Sat' || favoriteDay === 'Sun';
-      insights.push(`You usually listen on ${isWeekend ? 'weekends' : 'weekdays'} during the ${topPattern.period.toLowerCase()}.`);
+      insights.push({ type: 'listening_pattern', params: { period: topPattern.period.toLowerCase(), when: isWeekend ? 'weekends' : 'weekdays' } });
     }
     if (totalProgress >= 5 && completionRate < 40) {
-      insights.push(`You've started ${totalProgress} episodes but only finished ${episodesCompleted}. Try shorter episodes!`);
+      insights.push({ type: 'completion_low', params: { started: totalProgress, completed: episodesCompleted } });
     }
 
     const episodesStarted = episodesStartedRes.count || 0;

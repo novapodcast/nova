@@ -9,6 +9,7 @@ import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
 import FavoriteButton from '@/components/FavoriteButton';
 import ShareButton from '@/components/ShareButton';
+import { useResumePlayback } from '@/lib/useResumePlayback';
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -134,6 +135,7 @@ export default function EpisodeDetailPage({ params }: Props) {
   const accRef = useRef<number>(0);
   const sessionIdRef = useRef<string>('');
   const isOnlineRef = useRef<boolean>(true);
+  const { onLoadedMetadata: onLoadedMetadataResume } = useResumePlayback(params.id);
 
   useEffect(() => {
     const cacheKey = `episode_${params.id}_v1`;
@@ -230,9 +232,9 @@ export default function EpisodeDetailPage({ params }: Props) {
       <div className="container py-12 md:py-16">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-2xl font-bold mb-4">{t('common.error', language)}</h1>
-          <p className="text-muted mb-6">Episode not found or unavailable.</p>
+          <p className="text-muted mb-6">{t('episodes.notFound', language)}</p>
           <Link href="/podcasts" className="inline-block px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
-            Back to Podcasts
+            {t('episodes.backToPodcast', language)}
           </Link>
         </div>
       </div>
@@ -435,7 +437,7 @@ export default function EpisodeDetailPage({ params }: Props) {
       <div className="container py-12 md:py-16">
         <div className="max-w-4xl mx-auto">
           <Link href={episode.podcast_id ? `/podcasts/${episode.podcast_id}` : '/podcasts'} className="inline-flex items-center text-sm text-muted hover:text-white mb-6 transition">
-            ← Back to Podcast
+            ← {t('episodes.backToPodcast', language)}
           </Link>
 
         <div className="grid md:grid-cols-[300px_1fr] gap-8">
@@ -468,19 +470,19 @@ export default function EpisodeDetailPage({ params }: Props) {
             <div className="flex flex-wrap gap-3">
               <button onClick={handleListenNow} className="flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                {language === 'rw' ? 'Kumva None' : 'Listen Now'}
+                {t('episodes.listenNow', language)}
               </button>
               <FavoriteButton episodeId={params.id} variant="full" />
               <ShareButton episodeId={params.id} podcastId={episode.podcast_id || undefined} title={title} variant="full" />
             </div>
 
             {loadingStream && (
-              <div className="mt-3 text-sm text-muted">Preparing your stream…</div>
+              <div className="mt-3 text-sm text-muted">{t('episodes.preparingStream', language)}</div>
             )}
 
             {upgradeRequired && (
               <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
-                Your current plan does not include this content. <Link href="/pricing" className="text-yellow-200 underline hover:opacity-90">Upgrade to continue</Link>.
+                {t('episodes.upgradeRequired', language)} <Link href="/pricing" className="text-yellow-200 underline hover:opacity-90">{t('episodes.upgradeLink', language)}</Link>.
               </div>
             )}
 
@@ -494,6 +496,7 @@ export default function EpisodeDetailPage({ params }: Props) {
                 onPause={handleAudioPause}
                 onEnded={handleAudioEnded}
                 onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={onLoadedMetadataResume}
               />
             )}
 
@@ -510,7 +513,7 @@ export default function EpisodeDetailPage({ params }: Props) {
 
         {relatedEpisodes.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-bold mb-6">Related Episodes</h2>
+            <h2 className="text-2xl font-bold mb-6">{t('episodes.relatedEpisodes', language)}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
               {relatedEpisodes.map((ep) => (
                 <Link key={ep.id} href={`/episodes/${ep.id}`} className="bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition">

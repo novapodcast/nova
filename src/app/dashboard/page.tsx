@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { t } from '@/lib/i18n';
+import { t, renderInsight } from '@/lib/i18n';
 
 interface UserProfile {
   email: string;
@@ -38,11 +38,12 @@ interface AnalyticsData {
   favoriteDay: string | null;
   continueListening: { episode_id: string; title_en: string | null; title_rw: string | null; cover_image_url: string | null; podcast_title_en: string | null; podcast_title_rw: string | null; position_seconds: number; duration_seconds: number | null; progress_percent: number }[];
   recentlyCompleted: { episode_id: string; title_en: string | null; title_rw: string | null; cover_image_url: string | null; podcast_title_en: string | null; podcast_title_rw: string | null; completed_at: string }[];
-  insights: string[];
+  insights: { type: string; params?: Record<string, any> }[];
 }
 
 interface RecGroup {
-  title: string;
+  titleKey: string;
+  titleParams?: Record<string, any>;
   episodes: { id: string; title_en: string | null; title_rw: string | null; cover_image_url: string | null; duration_seconds: number | null; podcasts: { id: string; title_en: string | null; title_rw: string | null; cover_image_url: string | null } | null }[];
 }
 
@@ -229,7 +230,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium text-sm text-white truncate group-hover:text-primary transition">
-                      {(language === 'rw' ? item.title_rw : item.title_en) || item.title_en || 'Untitled'}
+                      {(language === 'rw' ? item.title_rw : item.title_en) || item.title_en || t('common.untitled', language)}
                     </h3>
                     <p className="text-xs text-muted truncate">
                       {(language === 'rw' ? item.podcast_title_rw : item.podcast_title_en) || ''}
@@ -337,7 +338,7 @@ export default function DashboardPage() {
             {analytics.insights.map((insight, i) => (
               <div key={i} className="flex items-start gap-2 text-sm text-white/90">
                 <span className="text-primary mt-0.5">•</span>
-                <span>{insight}</span>
+                <span>{renderInsight(insight, language)}</span>
               </div>
             ))}
           </div>
@@ -363,7 +364,7 @@ export default function DashboardPage() {
                     <div className="text-sm font-medium text-white truncate">
                       {(language === 'rw' ? analytics.topPodcasts[0].title_rw : analytics.topPodcasts[0].title_en) || analytics.topPodcasts[0].title_en}
                     </div>
-                    <div className="text-xs text-muted">{analytics.topPodcasts[0].listen_count} plays</div>
+                    <div className="text-xs text-muted">{analytics.topPodcasts[0].listen_count} {t('common.plays', language)}</div>
                   </div>
                 </div>
               </div>
@@ -373,7 +374,7 @@ export default function DashboardPage() {
               <div className="bg-[var(--surface)] rounded-xl p-4 ring-1 ring-white/5">
                 <div className="text-xs text-muted mb-2">{t('dashboard.topCategory', language)}</div>
                 <div className="text-lg font-semibold text-white">{analytics.topCategories[0].category}</div>
-                <div className="text-xs text-muted">{analytics.topCategories[0].count} plays</div>
+                <div className="text-xs text-muted">{analytics.topCategories[0].count} {t('common.plays', language)}</div>
               </div>
             )}
             {/* Favorite Speaker */}
@@ -381,7 +382,7 @@ export default function DashboardPage() {
               <div className="bg-[var(--surface)] rounded-xl p-4 ring-1 ring-white/5">
                 <div className="text-xs text-muted mb-2">{t('dashboard.favoriteSpeaker', language)}</div>
                 <div className="text-lg font-semibold text-white truncate">{analytics.topSpeakers[0].speaker}</div>
-                <div className="text-xs text-muted">{analytics.topSpeakers[0].count} plays</div>
+                <div className="text-xs text-muted">{analytics.topSpeakers[0].count} {t('common.plays', language)}</div>
               </div>
             )}
             {/* Favorite Time */}
@@ -431,7 +432,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-medium text-sm text-white truncate group-hover:text-primary transition">
-                    {(language === 'rw' ? item.title_rw : item.title_en) || item.title_en || 'Untitled'}
+                    {(language === 'rw' ? item.title_rw : item.title_en) || item.title_en || t('common.untitled', language)}
                   </h3>
                   <p className="text-xs text-muted truncate">
                     {(language === 'rw' ? item.podcast_title_rw : item.podcast_title_en) || ''}
@@ -454,7 +455,7 @@ export default function DashboardPage() {
           <div className="space-y-5">
             {recGroups.map((group, gi) => (
               <div key={gi}>
-                <h3 className="text-xs text-muted mb-2 italic">{group.title}</h3>
+                <h3 className="text-xs text-muted mb-2 italic">{t(group.titleKey, language, group.titleParams)}</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {group.episodes.map((ep) => (
                     <Link
@@ -474,7 +475,7 @@ export default function DashboardPage() {
                         )}
                       </div>
                       <div className="text-xs font-medium text-white line-clamp-2 group-hover:text-primary transition">
-                        {(language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || 'Untitled'}
+                        {(language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || t('common.untitled', language)}
                       </div>
                       <div className="text-[10px] text-muted truncate mt-0.5">
                         {(language === 'rw' ? ep.podcasts?.title_rw : ep.podcasts?.title_en) || ''}
@@ -500,7 +501,7 @@ export default function DashboardPage() {
               <div className="text-xs text-muted">
                 {subscription ? (
                   <>
-                    <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{subscription.status}</span>
+                    <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{t(`dashboard.status${subscription.status.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('')}`, language)}</span>
                     {subscription.expires_at && ` · ${t('dashboard.renews', language)} ${new Date(subscription.expires_at).toLocaleDateString()}`}
                   </>
                 ) : (
@@ -512,7 +513,7 @@ export default function DashboardPage() {
           <div className="flex gap-3">
             <Link href="/pricing" className="text-sm text-primary hover:underline">{t('dashboard.changePlan', language)}</Link>
             <Link href="/profile" className="text-sm text-primary hover:underline">{t('dashboard.manage', language)}</Link>
-            <Link href="/billing" className="text-sm text-primary hover:underline">Billing</Link>
+            <Link href="/billing" className="text-sm text-primary hover:underline">{t('common.billing', language)}</Link>
           </div>
         </div>
       </div>

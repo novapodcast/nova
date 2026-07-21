@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
     (progressRows || []).forEach((r: any) => listenedEpisodeIds.add(r.episode_id));
 
     const groups: {
-      title: string;
+      titleKey: string;
+      titleParams?: Record<string, any>;
       episodes: any[];
     }[] = [];
 
@@ -80,7 +81,8 @@ export async function GET(request: NextRequest) {
       const filtered = (moreEpisodes || []).filter((e: any) => !listenedEpisodeIds.has(e.id));
       if (filtered.length > 0) {
         groups.push({
-          title: podInfo?.title_en || podInfo?.title_rw || 'Because you listened',
+          titleKey: 'dashboard.recBecauseYouListened',
+          titleParams: { name: podInfo?.title_en || podInfo?.title_rw || '' },
           episodes: filtered.slice(0, 4),
         });
       }
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
         const filtered = (newFromFollows || []).filter((e: any) => !listenedEpisodeIds.has(e.id));
         if (filtered.length > 0) {
           groups.push({
-            title: 'New from creators you follow',
+            titleKey: 'dashboard.recNewFromFollows',
             episodes: filtered.slice(0, 4),
           });
         }
@@ -142,7 +144,7 @@ export async function GET(request: NextRequest) {
           const filtered = (trendingEps || []).filter((e: any) => !listenedEpisodeIds.has(e.id));
           if (filtered.length > 0) {
             groups.push({
-              title: 'Trending in your favorite category',
+              titleKey: 'dashboard.recTrendingCategory',
               episodes: filtered.slice(0, 4),
             });
           }
@@ -162,7 +164,7 @@ export async function GET(request: NextRequest) {
       const filtered = (latestEps || []).filter((e: any) => !listenedEpisodeIds.has(e.id));
       if (filtered.length > 0) {
         groups.push({
-          title: 'Latest episodes',
+          titleKey: 'dashboard.recLatestEpisodes',
           episodes: filtered,
         });
       }
