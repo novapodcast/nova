@@ -163,43 +163,50 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
           {featuredPodcasts.map((podcast) => {
             const title = (language === 'rw' ? podcast.title_rw : podcast.title_en) || podcast.title_en || podcast.title_rw || 'Untitled';
-            const description = (language === 'rw' ? podcast.description_rw : podcast.description_en) || '';
-
             return (
-              <Link
-                key={podcast.id}
-                href={`/podcasts/${podcast.id}`}
-                className="group block bg-[var(--surface)] rounded-2xl overflow-hidden ring-1 ring-white/5 hover:ring-white/20 transition"
-              >
-                <div className="relative h-48 bg-black/40">
+              <Link key={podcast.id} href={`/podcasts/${podcast.id}`} className="group block">
+                {/* Square artwork to match logged-in/library sizing */}
+                <div className="relative aspect-square rounded-xl bg-black/40 overflow-hidden ring-1 ring-white/5 group-hover:ring-primary/50 transition-all duration-300 group-hover:shadow-[0_8px_30px_rgba(34,197,94,0.15)]">
                   {podcast.cover_image_url ? (
                     <Image
                       src={podcast.cover_image_url}
                       alt={title}
                       fill
-                      sizes="(max-width: 768px) 100vw, 33vw"
-                      className="object-cover"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   ) : (
-                    <div className="h-full flex items-center justify-center text-muted">Cover coming soon</div>
+                    <div className="h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                      <span className="text-4xl opacity-50">🎙️</span>
+                    </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-                  <div className="absolute left-4 bottom-4 text-xs uppercase tracking-wider text-white/80">
-                    {podcast.speaker_name}
-                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
-                <div className="p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold line-clamp-2">{title}</h3>
-                    <div className="text-xs text-muted">{formatCount(podcast.total_episodes)} eps</div>
-                  </div>
-                  <p className="text-sm text-muted line-clamp-2">{description}</p>
-                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted">
-                    <span>{language === 'rw' ? 'Abamaze kuyumva' : 'Listeners'}: {formatCount(podcast.total_listeners)}</span>
-                    <span className="text-primary">View Episodes →</span>
+                {/* Meta */}
+                <div className="mt-3 space-y-1">
+                  <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">{title}</h3>
+                  {podcast.speaker_name && (
+                    <p className="text-sm text-muted/90 line-clamp-1">{podcast.speaker_name}</p>
+                  )}
+                  <div className="flex items-center gap-3 text-xs text-muted pt-1">
+                    <span className="flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                      {(podcast.total_episodes ?? 0) === 1 ? '1 Episode' : `${podcast.total_episodes ?? 0} Episodes`}
+                    </span>
+                    {(podcast.total_listeners ?? 0) > 0 && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        {formatCount(podcast.total_listeners)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>

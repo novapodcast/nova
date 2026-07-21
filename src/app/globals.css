@@ -5,7 +5,7 @@
 :root {
   --background: #000000;
   --surface: #1a1a1a;
-  --primary: #00ff00;
+  --primary: #22c55e;
   --accent: #ff00ff;
   --text: #ffffff;
   --muted: #999999;
@@ -28,7 +28,7 @@ body {
 }
 
 ::selection {
-  background: rgba(0, 255, 0, 0.25);
+  background: rgba(34, 197, 94, 0.25);
   color: #fff;
 }
 
@@ -38,7 +38,8 @@ body {
 }
 
 .container-hero {
-  background: radial-gradient(60% 60% at 50% 0%, rgba(0,255,0,0.08), rgba(0,0,0,0) 60%), #000;
+  /* Subtle radial glow using brand green */
+  background: radial-gradient(60% 60% at 50% 0%, rgba(34,197,94,0.12), rgba(0,0,0,0) 60%), #000;
 }
 
 .scrollbar-hide {
