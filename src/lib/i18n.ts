@@ -173,7 +173,7 @@ export const translations = {
       statusExpired: 'Byarengeye igihe',
       statusCancelled: 'Byahagaritswe',
       statusPastDue: 'Harenze igihe cy\'ubwishyu',
-      statusTrialing: 'Igihe cy\'ibigeragezo',
+      statusTrialing: 'Igihe cy\'ibigerageza',
       // Recommendation group titles (server returns titleKey)
       recBecauseYouListened: 'Kubera ko wumvise {{name}}',
       recNewFromFollows: 'Ibice bishya kuvukora ukurikirana',
