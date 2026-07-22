@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       totalProgressRes, episodesCompletedRes, historyRes, completedRowsRes,
       continueRes, activityRes, topContentRes, episodesStartedRes,
       listensRes, weekActivityRes,
+      favoritesCountRes, followsWithCategoryRes, yearProgressRes, yearListensRes,
     ] = await Promise.all([
       userClient.from('listening_progress').select('*', { count: 'exact', head: true }).eq('user_id', userId),
       userClient.from('listening_progress').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('completed', true),
@@ -68,6 +69,11 @@ export async function GET(request: NextRequest) {
       // Canonical source for actual listening duration
       userClient.from('listens').select('duration_seconds, created_at').eq('user_id', userId).gte('created_at', since14Days.toISOString()).limit(2000),
       userClient.from('playback_events').select('created_at, event_type, position_seconds').eq('user_id', userId).eq('event_type', 'episode_started').gte('created_at', since14Days.toISOString()),
+      // --- M2 extension: favoritesCount, followedCount, topGenres, yearInReview ---
+      userClient.from('favorites').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+      userClient.from('podcast_follows').select('podcasts(category)').eq('user_id', userId),
+      userClient.from('listening_progress').select('last_listened_at').eq('user_id', userId).gte('last_listened_at', new Date(now.getFullYear(), 0, 1).toISOString()),
+      userClient.from('listens').select('duration_seconds, created_at').eq('user_id', userId).gte('created_at', new Date(now.getFullYear(), 0, 1).toISOString()).limit(5000),
     ]);
 
     // --- Listen duration rows (canonical source: listens table) ---
@@ -334,11 +340,71 @@ export async function GET(request: NextRequest) {
 
     const episodesStarted = episodesStartedRes.count || 0;
 
+    // --- M2 extension: favoritesCount, followedCount, topGenres ---
+    const favoritesCount = favoritesCountRes.count || 0;
+    const genreMap = new Map<string, number>();
+    (followsWithCategoryRes.data || []).forEach((f: any) => {
+      const genre = f.podcasts?.category || 'Other';
+      genreMap.set(genre, (genreMap.get(genre) || 0) + 1);
+    });
+    const topGenres = Array.from(genreMap.entries())
+      .map(([genre, count]) => ({ genre, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const followedCount = (followsWithCategoryRes.data || []).length;
+
+    // --- M2 extension: yearInReview ---
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const yearProgressRows = (yearProgressRes.data || []) as any[];
+    const yearListenRows = (yearListensRes.data || []) as any[];
+    const yearMinutes = Math.round(
+      yearListenRows.reduce((sum, r) => sum + (r.duration_seconds || 0), 0) / 60
+    );
+    const yearMonthMap = new Map<string, number>();
+    yearProgressRows.forEach((r: any) => {
+      const d = new Date(r.last_listened_at);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      yearMonthMap.set(key, (yearMonthMap.get(key) || 0) + 1);
+    });
+    const topMonthEntry = Array.from(yearMonthMap.entries()).sort((a, b) => b[1] - a[1])[0];
+    // Year longest streak from listening days
+    const yearListeningDays = new Set(
+      yearProgressRows
+        .filter((r: any) => r.last_listened_at)
+        .map((r: any) => new Date(r.last_listened_at).toISOString().slice(0, 10))
+    );
+    const yearSortedDays = Array.from(yearListeningDays).sort();
+    let yearLongestStreak = 0;
+    let yearTempStreak = 0;
+    let yearPrevDate: Date | null = null;
+    for (const dayStr of yearSortedDays) {
+      const d = new Date(dayStr);
+      if (yearPrevDate) {
+        const diff = (d.getTime() - yearPrevDate.getTime()) / 86400000;
+        if (diff === 1) yearTempStreak++;
+        else yearTempStreak = 1;
+      } else {
+        yearTempStreak = 1;
+      }
+      yearLongestStreak = Math.max(yearLongestStreak, yearTempStreak);
+      yearPrevDate = d;
+    }
+    const yearInReview = {
+      year: now.getFullYear(),
+      totalEpisodes: yearProgressRows.length,
+      totalMinutes: yearMinutes,
+      longestStreak: yearLongestStreak,
+      topMonth: topMonthEntry ? topMonthEntry[0] : null,
+    };
+
     return NextResponse.json({
       episodesCompleted, totalProgress, completionRate, activityByDay, monthlySummary, history,
       currentStreak, longestStreak, minutesToday, minutesThisWeek, minutesThisMonth, minutesLifetime,
       episodesStarted, weeklyActivity, topPodcasts, topCategories, topSpeakers,
       listeningPattern, favoriteDay, continueListening, recentlyCompleted, insights,
+      // M2 extension (additive — backward compatible)
+      favoritesCount, followedCount, topGenres, yearInReview,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
