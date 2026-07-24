@@ -205,8 +205,8 @@ export default function LibraryPage() {
               <EmptyState
                 icon="headphones"
                 language={language}
-                title={language === 'rw' ? 'Nta gice urimo kumva.' : 'No episodes in progress'}
-                description={language === 'rw' ? 'Tangira kumva podikasiti, hanyuma aho ugeze hazajya hgaragara hano.' : 'Start listening to podcasts and your progress will appear here'}
+                title={language === 'rw' ? 'Nta gice urimo kumva ubu.' : 'No episodes in progress'}
+                description={language === 'rw' ? 'Tangira kumva ibiganiro, kandi aho ugeze ubyumva hazagaragara hano.' : 'Start listening to podcasts and your progress will appear here'}
               />
             ) : (
               continueItems.map((item) => {
@@ -262,8 +262,8 @@ export default function LibraryPage() {
               <EmptyState
                 icon="clock"
                 language={language}
-                title={language === 'rw' ? 'Nta makuru yumvwe' : 'No listening history yet'}
-                description={language === 'rw' ? 'Tangira kumva amakuru yigitangaza' : 'Start listening to podcasts to build your history'}
+                title={language === 'rw' ? 'Nta mateka yo kumva araboneka.' : 'No listening history yet'}
+                description={language === 'rw' ? 'Tangira kumva ibiganiro kugira ngo amateka yo kubyumva agaragare hano.' : 'Start listening to podcasts to build your history'}
               />
             ) : (
               recentItems.map((item) => {
