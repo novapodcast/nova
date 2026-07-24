@@ -309,8 +309,8 @@ export default function LibraryPage() {
               <EmptyState
                 icon="heart"
                 language={language}
-                title={language === 'rw' ? 'Nta gice cyo gukunda' : 'No favorites yet'}
-                description={language === 'rw' ? 'Kanda ku kibuno cyo kugirishwa ugere ku gice cyo gukunda' : 'Tap the heart icon on episodes to save them here'}
+                title={language === 'rw' ? "Nta byo wakunze urabika." : 'No favorites yet'}
+                description={language === 'rw' ? "Kanda ku kimenyetso cy'umutima ku gice cy'ikiganiro ushaka kugira ngo kibikwe hano." : 'Tap the heart icon on episodes to save them here'}
               />
             ) : (
               favorites.map((item) => {
@@ -383,7 +383,7 @@ function EmptyState({ icon, title, description, language }: { icon: string; titl
         href="/"
         className="inline-block mt-6 px-6 py-2.5 bg-primary text-black font-medium rounded-lg hover:opacity-90 transition"
       >
-        {language === 'rw' ? 'Reba Podikasiti' : 'Browse Podcasts'}
+        {language === 'rw' ? 'Reba ibiganiro byose.' : 'Browse Podcasts'}
       </Link>
     </div>
   );
