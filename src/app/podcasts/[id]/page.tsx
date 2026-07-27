@@ -365,17 +365,30 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                 return (
                   <div
                     key={ep.id}
-                    className={`flex gap-4 rounded-xl p-4 ring-1 transition-all ${
+                    className={`flex gap-3 rounded-xl p-3 ring-1 transition-all ${
                       isCurrentEpisode 
                         ? 'bg-primary/10 ring-primary/30' 
                         : 'bg-[var(--surface)] ring-white/5 hover:ring-white/15'
                     }`}
                   >
+                    {/* Artwork thumbnail */}
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
+                      {ep.cover_image_url || podcast.cover_image_url ? (
+                        <Image
+                          src={ep.cover_image_url || podcast.cover_image_url || ''}
+                          alt=""
+                          fill
+                          sizes="56px"
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </div>
+
                     {/* Play button */}
                     <button
                       onClick={() => playEpisode(ep)}
                       disabled={!ep.audio_url}
-                      className={`relative w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center transition-all ${
+                      className={`relative w-12 h-12 rounded-full self-center flex-shrink-0 flex items-center justify-center transition-all ${
                         ep.audio_url 
                           ? isCurrentEpisode && isPlaying
                             ? 'bg-primary text-black'
@@ -410,6 +423,12 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                                 day: 'numeric'
                               })}
                             </span>
+                            {ep.duration_seconds != null && (
+                              <>
+                                <span className="text-muted">•</span>
+                                <span className="text-xs text-muted">{formatDuration(ep.duration_seconds)}</span>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -417,7 +436,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                         {epTitle}
                       </h3>
                       {epDesc && (
-                        <p className="text-sm text-muted line-clamp-2 mt-1 leading-relaxed">{epDesc}</p>
+                        <p className="text-sm text-muted line-clamp-1 mt-0.5 leading-relaxed">{epDesc}</p>
                       )}
                       <div className="flex items-center gap-3 text-xs text-muted mt-2">
                         {ep.duration_seconds != null && (
@@ -469,13 +488,20 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                 {t('podcasts.upgradePrompt', language)}
               </p>
               <div className="flex gap-3 justify-center">
-                <Link
-                  href="/pricing"
-                  onClick={() => trackPlaybackEvent('upgrade_clicked', { upgrade_converted: true })}
-                  className="px-6 py-2.5 bg-primary text-black font-semibold rounded-lg hover:opacity-90 transition"
-                >
-                  {t('podcasts.upgradePlan', language)}
-                </Link>
+                {(() => {
+                  const rank = upgradeRequired?.content_tier_rank ?? 1;
+                  const plan = rank >= 3 ? 'Premium' : rank === 2 ? 'Pro' : 'Basic';
+                  const href = `/pricing?recommend=${encodeURIComponent(plan)}`;
+                  return (
+                    <Link
+                      href={href}
+                      onClick={() => trackPlaybackEvent('upgrade_clicked', { upgrade_converted: true, recommend: plan })}
+                      className="px-6 py-2.5 bg-primary text-black font-semibold rounded-lg hover:opacity-90 transition"
+                    >
+                      {language === 'rw' ? `Hindura ku ${plan}` : `Upgrade to ${plan}`}
+                    </Link>
+                  );
+                })()}
                 <button
                   onClick={() => { setUpgradeRequired(null); setCurrentEpisode(null); }}
                   className="px-6 py-2.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"

@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [recGroups, setRecGroups] = useState<RecGroup[]>([]);
   const [minuteTab, setMinuteTab] = useState<MinuteTab>('week');
+  const [countdown, setCountdown] = useState<string | null>(null);
 
   const greetingKey = useCallback(() => {
     const h = new Date().getHours();
@@ -140,6 +141,24 @@ export default function DashboardPage() {
     loadData();
     return () => { active = false; };
   }, [router]);
+
+  // Subscription countdown timer
+  useEffect(() => {
+    if (!subscription?.expires_at) { setCountdown(null); return; }
+    const update = () => {
+      const end = new Date(subscription.expires_at as string).getTime();
+      const now = Date.now();
+      const diff = end - now;
+      if (isNaN(end) || diff <= 0) { setCountdown('00d 00h 00m'); return; }
+      const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      setCountdown(`${String(d).padStart(2,'0')}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`);
+    };
+    update();
+    const id = setInterval(update, 60 * 1000);
+    return () => clearInterval(id);
+  }, [subscription?.expires_at]);
 
   const onSignOut = async () => {
     await supabase.auth.signOut();
@@ -508,6 +527,12 @@ export default function DashboardPage() {
                   t('dashboard.noActivePlan', language)
                 )}
               </div>
+              {subscription?.expires_at && (
+                <div className="text-xs mt-1">
+                  <span className="text-muted mr-1">{language === 'rw' ? 'Igihe gisigaye' : 'Time remaining'}:</span>
+                  <span className="font-semibold text-white">{countdown ?? '—'}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3">

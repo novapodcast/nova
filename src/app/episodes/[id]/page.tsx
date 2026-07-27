@@ -481,8 +481,25 @@ export default function EpisodeDetailPage({ params }: Props) {
             )}
 
             {upgradeRequired && (
-              <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
-                {t('episodes.upgradeRequired', language)} <Link href="/pricing" className="text-yellow-200 underline hover:opacity-90">{t('episodes.upgradeLink', language)}</Link>.
+              <div className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="text-white/90">
+                    {t('episodes.upgradeRequired', language)}
+                  </div>
+                  {(() => {
+                    const rank = upgradeRequired?.content_tier_rank ?? 1;
+                    const plan = rank >= 3 ? 'Premium' : rank === 2 ? 'Pro' : 'Basic';
+                    const href = `/pricing?recommend=${encodeURIComponent(plan)}`;
+                    return (
+                      <Link
+                        href={href}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition"
+                      >
+                        {language === 'rw' ? `Hindura ku ${plan}` : `Upgrade to ${plan}`}
+                      </Link>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 

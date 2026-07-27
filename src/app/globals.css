@@ -131,3 +131,8 @@ input[type="range"]::-moz-range-track {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
+
+/* Content zoom utility (keeps header size unchanged) */
+.zoom-75 {
+  zoom: 0.75;
+}

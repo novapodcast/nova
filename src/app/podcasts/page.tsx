@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { fetchAllPublicPodcasts } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSearchParams } from 'next/navigation';
 
 interface Podcast {
   id: string;
@@ -22,6 +23,9 @@ export default function PodcastsPage() {
   const [podcasts, setPodcasts] = useState<Podcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [categories, setCategories] = useState<{ id: string; name_en: string; name_rw: string }[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const load = async () => {
@@ -32,17 +36,39 @@ export default function PodcastsPage() {
       setLoading(false);
     };
     load();
+    // Load categories for filter chips
+    (async () => {
+      try {
+        const res = await fetch('/api/site-metrics');
+        const json = res.ok ? await res.json() : null;
+        if (json?.categories) setCategories(json.categories);
+      } catch {}
+    })();
   }, []);
 
-  const visiblePodcasts = podcasts.filter((p) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      p.title_en?.toLowerCase().includes(q) ||
-      p.title_rw?.toLowerCase().includes(q) ||
-      p.speaker_name?.toLowerCase().includes(q)
-    );
-  });
+  // Initialize category from URL param once categories are loaded
+  useEffect(() => {
+    const c = (searchParams?.get('category') || '').toLowerCase();
+    if (!c || categories.length === 0) return;
+    const match = categories.find((x) => x.name_en.toLowerCase() === c || x.name_rw.toLowerCase() === c);
+    if (match) setSelectedCategoryId(match.id);
+  }, [searchParams, categories]);
+
+  const visiblePodcasts = useMemo(() => {
+    let rows = podcasts;
+    if (selectedCategoryId) {
+      rows = rows.filter((p: any) => p.category_id === selectedCategoryId);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      rows = rows.filter((p) => (
+        p.title_en?.toLowerCase().includes(q) ||
+        p.title_rw?.toLowerCase().includes(q) ||
+        p.speaker_name?.toLowerCase().includes(q)
+      ));
+    }
+    return rows;
+  }, [podcasts, selectedCategoryId, searchQuery]);
 
   const formatCount = (value: number | null | undefined) => {
     if (!value) return '0';
@@ -90,6 +116,31 @@ export default function PodcastsPage() {
           />
         </div>
       </div>
+
+      {/* Category Filter Chips */}
+      {categories.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-8 scrollbar-hide">
+          <button
+            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
+              selectedCategoryId === null ? 'bg-primary text-black' : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+            }`}
+            onClick={() => setSelectedCategoryId(null)}
+          >
+            {language === 'rw' ? 'Byose' : 'All'}
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
+                selectedCategoryId === cat.id ? 'bg-primary text-black' : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
+              }`}
+              onClick={() => setSelectedCategoryId(cat.id)}
+            >
+              {language === 'rw' ? cat.name_rw : cat.name_en}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Loading skeleton - square cards */}
       {loading && (

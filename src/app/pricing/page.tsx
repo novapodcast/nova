@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { getCache, setCache } from '@/lib/cache';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -27,6 +28,8 @@ export default function PricingPage() {
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const searchParams = useSearchParams();
+  const recommend = (searchParams?.get('recommend') || '').toLowerCase();
 
   useEffect(() => {
     // Check authentication status
@@ -76,6 +79,17 @@ export default function PricingPage() {
 
   // Filter out Free from grouped plans and get plan order
   const planNames = ['Basic', 'Pro', 'Premium'].filter(name => groupedPlans[name]);
+
+  // Scroll to recommended plan if provided
+  const planRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    const key = recommend === 'basic' || recommend === 'pro' || recommend === 'premium' ? recommend : '';
+    if (key) {
+      const k = key.charAt(0).toUpperCase() + key.slice(1);
+      const el = planRefs.current[k];
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [recommend, tiers]);
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('en-US');
@@ -186,18 +200,23 @@ export default function PricingPage() {
           const fallbackTier = monthlyTier || annualTier || preferredTier;
           const displayFeatures = currentFeatures.length > 0 ? currentFeatures : featuresForLanguage(fallbackTier);
 
+          const isRecommended = recommend === planName.toLowerCase();
+
           return (
             <div
               key={planName}
+              ref={(el) => { planRefs.current[planName] = el; }}
               className={`rounded-2xl p-6 flex flex-col relative ${
                 preferredTier.is_highlighted
                   ? 'bg-gradient-to-b from-primary/10 to-[var(--surface)] ring-2 ring-primary md:scale-[1.02]'
-                  : 'bg-[var(--surface)] ring-1 ring-white/5'
+                  : isRecommended
+                    ? 'bg-gradient-to-b from-primary/5 to-[var(--surface)] ring-2 ring-primary/70'
+                    : 'bg-[var(--surface)] ring-1 ring-white/5'
               }`}
             >
-              {preferredTier.is_highlighted && (
+              {(preferredTier.is_highlighted || isRecommended) && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-black text-xs font-bold rounded-full">
-                  ⭐ {t('admin.mostPopular', language)}
+                  ⭐ {isRecommended ? (language === 'rw' ? 'Bitekerezwa' : 'Recommended') : t('admin.mostPopular', language)}
                 </div>
               )}
 

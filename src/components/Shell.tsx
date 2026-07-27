@@ -239,7 +239,20 @@ export default function Shell({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
       <Header />
-      <main id="main-content">{children}</main>
+      <main id="main-content" className="zoom-75">{children}</main>
+      {/* WhatsApp Chat Button */}
+      <a
+        href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || ''}?text=${encodeURIComponent('Hi Nova team 👋, I need some help.')}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Chat on WhatsApp"
+        className="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-[#25D366] shadow-lg flex items-center justify-center hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/20"
+      >
+        <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true" fill="#000">
+          <path d="M19.11 17.27c-.3-.16-1.77-.88-2.05-.98-.27-.1-.47-.16-.67.16-.2.32-.77.98-.95 1.18-.17.2-.35.22-.64.08-.3-.16-1.26-.46-2.4-1.47-.89-.79-1.49-1.76-1.67-2.06-.17-.3-.02-.47.13-.63.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.37-.02-.53-.07-.16-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.5-.17 0-.37-.02-.57-.02-.2 0-.53.08-.8.37-.27.3-1.05 1.03-1.05 2.5s1.08 2.9 1.23 3.1c.15.2 2.12 3.23 5.14 4.53.72.31 1.28.5 1.72.64.72.23 1.38.2 1.9.12.58-.09 1.77-.72 2.02-1.41.25-.69.25-1.28.18-1.41-.07-.13-.27-.2-.57-.35z"/>
+          <path d="M26.7 5.3C24.2 2.8 20.9 1.5 17.5 1.5 9.7 1.5 3.4 7.8 3.4 15.6c0 2.5.7 4.9 2 7l-1.3 4.8 4.9-1.3c2 1.1 4.3 1.7 6.6 1.7h0c7.8 0 14.1-6.3 14.1-14.1 0-3.4-1.3-6.7-3.6-9zM17.6 25.5h0c-2.1 0-4.2-.6-6-1.6l-.4-.2-2.9.8.8-2.9-.2-.4c-1.1-1.8-1.6-3.8-1.6-5.9 0-6.2 5.1-11.3 11.3-11.3 3 0 5.8 1.2 8 3.3 2.1 2.1 3.3 5 3.3 8 0 6.2-5.1 11.2-11.3 11.2z"/>
+        </svg>
+      </a>
       {consent === 'unknown' && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[95%] md:w-[720px]">
           <div className="bg-[var(--surface)] border border-white/10 rounded-xl p-4 shadow-xl">
