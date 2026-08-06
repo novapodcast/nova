@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { fetchAllPublicPodcasts } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useSearchParams } from 'next/navigation';
+import PlayOverlay from '@/components/PlayOverlay';
 
 interface Podcast {
   id: string;
@@ -210,15 +211,8 @@ export default function PodcastsPage() {
                   )}
                   {/* Subtle gradient overlay on hover */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  
-                  {/* Play indicator on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
-                      <svg className="w-6 h-6 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                  </div>
+                  {/* Unified play overlay */}
+                  <PlayOverlay size={36} />
                 </div>
 
                 {/* Metadata below artwork */}

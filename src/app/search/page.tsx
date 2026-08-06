@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { selectPublicPodcasts } from '@/lib/data/podcasts';
+import EpisodeRow from '@/components/EpisodeRow';
+import PlayOverlay from '@/components/PlayOverlay';
 
 interface SearchResult {
   type: 'podcast' | 'episode';
@@ -53,7 +55,7 @@ export default function SearchPage() {
         supabase
           .from('episodes')
           .select(`
-            id, title_en, title_rw, description_en, description_rw, cover_image_url, status,
+            id, title_en, title_rw, description_en, description_rw, cover_image_url, status, duration_seconds, published_at,
             podcasts(id, title_en, title_rw, cover_image_url)
           `)
           .eq('status', 'published')
@@ -77,6 +79,8 @@ export default function SearchPage() {
         subtitle: e.podcasts ? ((language === 'rw' ? e.podcasts.title_rw : e.podcasts.title_en) || e.podcasts.title_en || '') : '',
         cover_image_url: e.cover_image_url || e.podcasts?.cover_image_url,
         href: `/episodes/${e.id}`,
+        duration_seconds: e.duration_seconds,
+        published_at: e.published_at,
       }));
 
       setResults([...podcastResults, ...episodeResults]);
@@ -166,8 +170,21 @@ export default function SearchPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-8">
+            <div>
+              <div className="h-5 w-32 bg-white/5 rounded mb-4 animate-pulse" />
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-white/5">
+                    <div className="w-14 h-14 rounded-lg bg-white/10 animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-2/3 bg-white/10 rounded animate-pulse" />
+                      <div className="h-3 w-1/3 bg-white/10 rounded animate-pulse" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -200,6 +217,7 @@ export default function SearchPage() {
                         {r.cover_image_url && (
                           <Image src={r.cover_image_url} alt="" fill sizes="56px" className="object-cover" />
                         )}
+                        <PlayOverlay size={26} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-white truncate group-hover:text-primary transition">{r.title}</h3>
@@ -223,24 +241,22 @@ export default function SearchPage() {
                 </h2>
                 <div className="space-y-2">
                   {episodeResults.map((r) => (
-                    <Link
+                    <EpisodeRow
                       key={`ep-${r.id}`}
-                      href={r.href}
-                      className="flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition group"
-                    >
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
-                        {r.cover_image_url && (
-                          <Image src={r.cover_image_url} alt="" fill sizes="56px" className="object-cover" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-white truncate group-hover:text-primary transition">{r.title}</h3>
-                        {r.subtitle && <p className="text-xs text-muted truncate">{r.subtitle}</p>}
-                      </div>
-                      <svg className="w-5 h-5 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                      data={{
+                        id: r.id,
+                        title_en: r.title,
+                        title_rw: r.title, // using the same for compactness here
+                        description_en: '',
+                        description_rw: '',
+                        cover_image_url: r.cover_image_url,
+                        podcast_title_en: r.subtitle,
+                        podcast_title_rw: r.subtitle,
+                        duration_seconds: (r as any).duration_seconds,
+                        published_at: (r as any).published_at,
+                        href: r.href,
+                      }}
+                    />
                   ))}
                 </div>
               </div>

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t, renderInsight } from '@/lib/i18n';
+import EpisodeRow from '@/components/EpisodeRow';
+import PlayOverlay from '@/components/PlayOverlay';
 
 interface UserProfile {
   email: string;
@@ -234,40 +236,32 @@ export default function DashboardPage() {
       {analytics?.continueListening && analytics.continueListening.length > 0 ? (
         <div className="mb-6">
           <h2 className="text-sm font-medium text-muted mb-3">{t('dashboard.continueListening', language)}</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+          <div className="space-y-2">
             {analytics.continueListening.map((item) => (
-              <Link
+              <EpisodeRow
                 key={item.episode_id}
-                href={`/episodes/${item.episode_id}`}
-                className="flex-shrink-0 w-72 bg-[var(--surface)] rounded-xl p-3 ring-1 ring-white/5 hover:ring-white/20 transition group"
-              >
-                <div className="flex gap-3">
-                  <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-black/40">
-                    {item.cover_image_url && (
-                      <Image src={item.cover_image_url} alt="" fill sizes="64px" className="object-cover" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-sm text-white truncate group-hover:text-primary transition">
-                      {(language === 'rw' ? item.title_rw : item.title_en) || item.title_en || t('common.untitled', language)}
-                    </h3>
-                    <p className="text-xs text-muted truncate">
-                      {(language === 'rw' ? item.podcast_title_rw : item.podcast_title_en) || ''}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${item.progress_percent}%` }} />
-                      </div>
-                      <span className="text-xs text-muted">{item.progress_percent}%</span>
+                data={{
+                  id: item.episode_id,
+                  title_en: item.title_en,
+                  title_rw: item.title_rw,
+                  description_en: '',
+                  description_rw: '',
+                  cover_image_url: item.cover_image_url,
+                  podcast_title_en: item.podcast_title_en,
+                  podcast_title_rw: item.podcast_title_rw,
+                  duration_seconds: item.duration_seconds,
+                  href: `/episodes/${item.episode_id}`,
+                }}
+                onPlay={() => router.push(`/episodes/${item.episode_id}`)}
+                bodyBelow={
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${item.progress_percent}%` }} />
                     </div>
+                    <span className="text-xs text-muted whitespace-nowrap">{item.progress_percent}%</span>
                   </div>
-                  <div className="flex-shrink-0 self-center">
-                    <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition">
-                      <svg className="w-4 h-4 text-primary ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+                }
+              />
             ))}
           </div>
         </div>
@@ -492,6 +486,7 @@ export default function DashboardPage() {
                             className="object-cover"
                           />
                         )}
+                        <PlayOverlay size={28} />
                       </div>
                       <div className="text-xs font-medium text-white line-clamp-2 group-hover:text-primary transition">
                         {(language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || t('common.untitled', language)}
@@ -528,9 +523,18 @@ export default function DashboardPage() {
                 )}
               </div>
               {subscription?.expires_at && (
-                <div className="text-xs mt-1">
+                <div className="text-xs mt-1 relative group inline-block">
                   <span className="text-muted mr-1">{language === 'rw' ? 'Igihe gisigaye' : 'Time remaining'}:</span>
-                  <span className="font-semibold text-white">{countdown ?? '—'}</span>
+                  <span className="font-semibold text-white cursor-help">{countdown ?? '—'}</span>
+                  <div className="absolute left-0 mt-1 w-56 p-2 rounded-md bg-black/90 text-[11px] text-white/90 border border-white/10 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                    <div className="font-semibold mb-1">{language === 'rw' ? 'Izarangira ku' : 'Expires on'}</div>
+                    <div>
+                      {new Date(subscription.expires_at).toLocaleDateString(undefined, { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </div>
+                    <div>
+                      {new Date(subscription.expires_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

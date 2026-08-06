@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
 import NewsletterSignup from '../components/NewsletterSignup';
 import HeroCarousel, { CarouselSlide } from '../components/HeroCarousel';
+import PlayOverlay from '@/components/PlayOverlay';
 import { fetchFeaturedPublicPodcasts } from '@/lib/data/podcasts';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -97,39 +98,46 @@ export default function HomePage() {
       {/* Traffic indicators + Platform categories */}
       <section className="container py-8 md:py-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
-          <div className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
-            <div className="text-2xl md:text-3xl font-extrabold text-white">
-              {metrics ? new Intl.NumberFormat('en-US', { notation: 'compact' }).format(metrics.viewers) : '—'}+
+          {[{
+            labelRw: 'Abarebye', labelEn: 'Viewers', value: metrics?.viewers
+          },{ labelRw: 'Ibice byashyizweho', labelEn: 'Episodes uploaded', value: metrics?.episodes },{ labelRw: 'Iminota yumviswe', labelEn: 'Minutes listened', value: metrics?.minutes_listened }].map((card, i) => (
+            <div key={i} className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
+              {card.value == null ? (
+                <div>
+                  <div className="h-8 w-24 bg-white/5 rounded animate-pulse" />
+                  <div className="h-3 w-32 bg-white/5 rounded mt-2 animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl md:text-3xl font-extrabold text-white">{new Intl.NumberFormat('en-US', { notation: 'compact' }).format(card.value)}+</div>
+                  <div className="text-sm text-muted mt-1">{language === 'rw' ? card.labelRw : card.labelEn}</div>
+                </>
+              )}
             </div>
-            <div className="text-sm text-muted mt-1">{language === 'rw' ? 'Abarebye' : 'Viewers'}</div>
-          </div>
-          <div className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
-            <div className="text-2xl md:text-3xl font-extrabold text-white">
-              {metrics ? new Intl.NumberFormat('en-US', { notation: 'compact' }).format(metrics.episodes) : '—'}+
-            </div>
-            <div className="text-sm text-muted mt-1">{language === 'rw' ? 'Ibice byashyizweho' : 'Episodes uploaded'}</div>
-          </div>
-          <div className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
-            <div className="text-2xl md:text-3xl font-extrabold text-white">
-              {metrics ? new Intl.NumberFormat('en-US', { notation: 'compact' }).format(metrics.minutes_listened) : '—'}+
-            </div>
-            <div className="text-sm text-muted mt-1">{language === 'rw' ? 'Iminota yumviswe' : 'Minutes listened'}</div>
-          </div>
+          ))}
         </div>
-        {metrics?.categories && metrics.categories.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            <Link href="/podcasts" className="px-4 py-2 rounded-full bg-primary text-black text-sm font-semibold whitespace-nowrap">{language === 'rw' ? 'Byose' : 'All'}</Link>
-            {metrics.categories.map((c) => (
-              <Link
-                key={(c.name_en || c.name_rw)}
-                href={`/podcasts?category=${encodeURIComponent(language === 'rw' ? c.name_rw : c.name_en)}`}
-                className="px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors"
-              >
-                {language === 'rw' ? c.name_rw : c.name_en}
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {(!metrics || !metrics.categories) ? (
+            <>
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="px-10 py-2 rounded-full bg-white/5 border border-white/10 animate-pulse" />
+              ))}
+            </>
+          ) : (
+            <>
+              <Link href="/podcasts" className="px-4 py-2 rounded-full bg-primary text-black text-sm font-semibold whitespace-nowrap">{language === 'rw' ? 'Byose' : 'All'}</Link>
+              {metrics.categories.map((c) => (
+                <Link
+                  key={(c.name_en || c.name_rw)}
+                  href={`/podcasts?category=${encodeURIComponent(language === 'rw' ? c.name_rw : c.name_en)}`}
+                  className="px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap bg-white/5 text-white border border-white/10 hover:bg-white/10 transition-colors"
+                >
+                  {language === 'rw' ? c.name_rw : c.name_en}
+                </Link>
+              ))}
+            </>
+          )}
+        </div>
       </section>
 
       {/* Continue Listening (for logged-in users) */}
@@ -225,6 +233,7 @@ export default function HomePage() {
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <PlayOverlay size={36} />
                 </div>
                 {/* Meta */}
                 <div className="mt-3 space-y-1">

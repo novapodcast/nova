@@ -2,8 +2,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '@/contexts/LanguageContext';
+import EpisodeRow from '@/components/EpisodeRow';
 
 interface ProgressItem {
   episode_id: string;
@@ -55,6 +57,7 @@ interface FavoriteItem {
 type Tab = 'continue' | 'recent' | 'favorites';
 
 export default function LibraryPage() {
+  const router = useRouter();
   const { language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('continue');
@@ -200,7 +203,7 @@ export default function LibraryPage() {
 
         {/* Continue Listening */}
         {activeTab === 'continue' && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {continueItems.length === 0 ? (
               <EmptyState
                 icon="headphones"
@@ -213,26 +216,26 @@ export default function LibraryPage() {
                 if (!item.episodes) return null;
                 const ep = item.episodes;
                 const pod = ep.podcasts;
-                const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || 'Untitled';
-                const podTitle = pod ? ((language === 'rw' ? pod.title_rw : pod.title_en) || pod.title_en) : '';
                 const cover = ep.cover_image_url || pod?.cover_image_url;
                 const progressPercent = getProgressPercent(item);
-
                 return (
-                  <Link
+                  <EpisodeRow
                     key={item.episode_id}
-                    href={`/episodes/${ep.id}`}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition group"
-                  >
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
-                      {cover && (
-                        <Image src={cover} alt="" fill sizes="64px" className="object-cover" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-white truncate group-hover:text-primary transition">{epTitle}</h3>
-                      <p className="text-xs text-muted truncate">{podTitle}</p>
-                      <div className="flex items-center gap-2 mt-2">
+                    data={{
+                      id: ep.id,
+                      title_en: ep.title_en,
+                      title_rw: ep.title_rw,
+                      description_en: '',
+                      description_rw: '',
+                      cover_image_url: cover,
+                      podcast_title_en: pod?.title_en || null,
+                      podcast_title_rw: pod?.title_rw || null,
+                      duration_seconds: ep.duration_seconds,
+                      href: `/episodes/${ep.id}`,
+                    }}
+                    onPlay={() => router.push(`/episodes/${ep.id}`)}
+                    bodyBelow={
+                      <div className="flex items-center gap-2">
                         <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
                           <div className="h-full bg-primary rounded-full" style={{ width: `${progressPercent}%` }} />
                         </div>
@@ -240,15 +243,8 @@ export default function LibraryPage() {
                           {formatTime(item.position_seconds)} / {formatTime(item.duration_seconds || ep.duration_seconds || 0)}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition">
-                        <svg className="w-5 h-5 text-primary ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      </div>
-                    </div>
-                  </Link>
+                    }
+                  />
                 );
               })
             )}
@@ -257,7 +253,7 @@ export default function LibraryPage() {
 
         {/* Recently Played */}
         {activeTab === 'recent' && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {recentItems.length === 0 ? (
               <EmptyState
                 icon="clock"
@@ -270,32 +266,28 @@ export default function LibraryPage() {
                 if (!item.episodes) return null;
                 const ep = item.episodes;
                 const pod = ep.podcasts;
-                const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || 'Untitled';
-                const podTitle = pod ? ((language === 'rw' ? pod.title_rw : pod.title_en) || pod.title_en) : '';
                 const cover = ep.cover_image_url || pod?.cover_image_url;
-
                 return (
-                  <Link
+                  <EpisodeRow
                     key={item.episode_id}
-                    href={`/episodes/${ep.id}`}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition group"
-                  >
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
-                      {cover && (
-                        <Image src={cover} alt="" fill sizes="64px" className="object-cover" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-white truncate group-hover:text-primary transition">{epTitle}</h3>
-                      <p className="text-xs text-muted truncate">{podTitle}</p>
-                      <p className="text-xs text-muted mt-1">{formatTimeAgo(item.last_listened_at)}</p>
-                    </div>
-                    {item.completed && (
-                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-400 font-medium">
-                        {language === 'rw' ? 'Byarangiye' : 'Completed'}
-                      </span>
-                    )}
-                  </Link>
+                    data={{
+                      id: ep.id,
+                      title_en: ep.title_en,
+                      title_rw: ep.title_rw,
+                      description_en: '',
+                      description_rw: '',
+                      cover_image_url: cover,
+                      podcast_title_en: pod?.title_en || null,
+                      podcast_title_rw: pod?.title_rw || null,
+                      duration_seconds: ep.duration_seconds,
+                      href: `/episodes/${ep.id}`,
+                    }}
+                    onPlay={() => router.push(`/episodes/${ep.id}`)}
+                    bodyBelow={<p className="text-xs text-muted">{formatTimeAgo(item.last_listened_at)}</p>}
+                    rightSlot={item.completed ? (
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-400 font-medium self-center">{language === 'rw' ? 'Byarangiye' : 'Completed'}</span>
+                    ) : null}
+                  />
                 );
               })
             )}
@@ -304,7 +296,7 @@ export default function LibraryPage() {
 
         {/* Favorites */}
         {activeTab === 'favorites' && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {favorites.length === 0 ? (
               <EmptyState
                 icon="heart"
@@ -317,32 +309,29 @@ export default function LibraryPage() {
                 if (!item.episodes) return null;
                 const ep = item.episodes;
                 const pod = ep.podcasts;
-                const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || 'Untitled';
-                const podTitle = pod ? ((language === 'rw' ? pod.title_rw : pod.title_en) || pod.title_en) : '';
                 const cover = ep.cover_image_url || pod?.cover_image_url;
-
                 return (
-                  <Link
+                  <EpisodeRow
                     key={item.episode_id}
-                    href={`/episodes/${ep.id}`}
-                    className="flex items-center gap-4 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition group"
-                  >
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
-                      {cover && (
-                        <Image src={cover} alt="" fill sizes="64px" className="object-cover" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-white truncate group-hover:text-primary transition">{epTitle}</h3>
-                      <p className="text-xs text-muted truncate">{podTitle}</p>
-                      {ep.duration_seconds && (
-                        <p className="text-xs text-muted mt-1">{formatTime(ep.duration_seconds)}</p>
-                      )}
-                    </div>
-                    <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                    </svg>
-                  </Link>
+                    data={{
+                      id: ep.id,
+                      title_en: ep.title_en,
+                      title_rw: ep.title_rw,
+                      description_en: ep.description_en,
+                      description_rw: ep.description_rw,
+                      cover_image_url: cover,
+                      podcast_title_en: pod?.title_en || null,
+                      podcast_title_rw: pod?.title_rw || null,
+                      duration_seconds: ep.duration_seconds,
+                      href: `/episodes/${ep.id}`,
+                    }}
+                    onPlay={() => router.push(`/episodes/${ep.id}`)}
+                    rightSlot={
+                      <svg className="w-5 h-5 text-red-400 flex-shrink-0 self-center" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                      </svg>
+                    }
+                  />
                 );
               })
             )}
