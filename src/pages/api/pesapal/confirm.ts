@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
-import { sendPaymentSuccessEmail, sendPaymentFailedEmail } from '../../../lib/notify';
+import { sendPaymentSuccessEmail, sendPaymentFailedEmail, sendSubscriptionRenewedEmail } from '../../../lib/notify';
 import { activateOrExtendSubscription } from '../../../lib/subscriptions';
 
 async function logEvent(type: string, payload: any) {
@@ -139,9 +139,19 @@ async function processPayment(
 
     // Activate subscription (+1 month default; could be improved with plan duration)
     if (payment.user_id) {
-      await activateOrExtendSubscription(payment.user_id, payment.amount || 0, 1);
+      const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0, 1);
       await recordBillingHistory(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF', 1);
       await sendNotifications(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF');
+
+      // Send subscription renewed email with new expiry date
+      if (newSub?.expires_at) {
+        try {
+          const { data: profile } = await supabaseAdmin!.from('profiles').select('email, full_name').eq('id', payment.user_id).single();
+          if (profile?.email) {
+            await sendSubscriptionRenewedEmail(profile.email, profile.full_name || '', new Date(newSub.expires_at));
+          }
+        } catch {}
+      }
     }
 
     await logEvent('confirm_success', { orderTrackingId, merchantRef, userId: payment.user_id });

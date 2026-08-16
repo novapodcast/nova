@@ -18,7 +18,9 @@ interface UserProfile {
 interface Subscription {
   plan_name: string;
   status: string;
+  effectiveStatus: 'active' | 'expiring_soon' | 'expired' | 'cancelled' | 'past_due';
   expires_at: string | null;
+  daysRemaining: number | null;
 }
 
 interface AnalyticsData {
@@ -127,10 +129,32 @@ export default function DashboardPage() {
           if (tier) planName = (tier as any).display_name_en || (tier as any).plan_name || 'Unknown';
         }
         if (planName === 'Unknown' && subData.status === 'active') planName = 'Active subscription';
+        const expiresAt = (subData as any).expires_at || (subData as any).current_period_end || null;
+        const now = new Date();
+        let effectiveStatus: Subscription['effectiveStatus'] = 'expired';
+        if (subData.status === 'cancelled') {
+          effectiveStatus = 'cancelled';
+        } else if (subData.status === 'past_due') {
+          effectiveStatus = 'past_due';
+        } else if (expiresAt) {
+          const expiry = new Date(expiresAt);
+          if (expiry > now) {
+            const horizon = new Date(now.getTime());
+            horizon.setDate(horizon.getDate() + 7);
+            effectiveStatus = expiry <= horizon ? 'expiring_soon' : 'active';
+          } else {
+            effectiveStatus = 'expired';
+          }
+        }
+        const daysRemaining = expiresAt
+          ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          : null;
         setSubscription({
           plan_name: planName,
           status: subData.status,
-          expires_at: (subData as any).expires_at || (subData as any).current_period_end || null,
+          effectiveStatus,
+          expires_at: expiresAt,
+          daysRemaining,
         });
       }
 
@@ -515,8 +539,23 @@ export default function DashboardPage() {
               <div className="text-xs text-muted">
                 {subscription ? (
                   <>
-                    <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{t(`dashboard.status${subscription.status.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('')}`, language)}</span>
-                    {subscription.expires_at && ` · ${t('dashboard.renews', language)} ${new Date(subscription.expires_at).toLocaleDateString()}`}
+                    <span className={
+                      subscription.effectiveStatus === 'active' ? 'text-green-400' :
+                      subscription.effectiveStatus === 'expiring_soon' ? 'text-yellow-400' :
+                      subscription.effectiveStatus === 'cancelled' ? 'text-orange-400' :
+                      'text-red-400'
+                    }>
+                      {subscription.effectiveStatus === 'active' ? t('dashboard.statusActive', language) :
+                       subscription.effectiveStatus === 'expiring_soon' ? (language === 'rw' ? 'Izera vuba' : 'Expiring Soon') :
+                       subscription.effectiveStatus === 'expired' ? (language === 'rw' ? 'Yarangiye' : 'Expired') :
+                       subscription.effectiveStatus === 'cancelled' ? (language === 'rw' ? 'Byakuweho' : 'Cancelled') :
+                       t('dashboard.statusActive', language)}
+                    </span>
+                    {subscription.effectiveStatus === 'expired' && subscription.expires_at
+                      ? ` · ${language === 'rw' ? 'Byarangiye ku' : 'Expired on'} ${new Date(subscription.expires_at).toLocaleDateString()}`
+                      : subscription.effectiveStatus === 'active' || subscription.effectiveStatus === 'expiring_soon'
+                        ? subscription.expires_at && ` · ${t('dashboard.renews', language)} ${new Date(subscription.expires_at).toLocaleDateString()}`
+                        : null}
                   </>
                 ) : (
                   t('dashboard.noActivePlan', language)
@@ -540,6 +579,9 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex gap-3">
+            {(subscription?.effectiveStatus === 'expired' || subscription?.effectiveStatus === 'cancelled') && (
+              <Link href="/pricing" className="text-sm text-primary hover:underline font-semibold">{language === 'rw' ? 'Kongera gushyura' : 'Renew Plan'}</Link>
+            )}
             <Link href="/pricing" className="text-sm text-primary hover:underline">{t('dashboard.changePlan', language)}</Link>
             <Link href="/profile" className="text-sm text-primary hover:underline">{t('dashboard.manage', language)}</Link>
             <Link href="/billing" className="text-sm text-primary hover:underline">{t('common.billing', language)}</Link>

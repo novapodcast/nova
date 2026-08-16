@@ -2,8 +2,10 @@
   "rewrites": [
     { "source": "/api/system/health", "destination": "/api/monitor/health" }
   ],
-  "crons": [{
-    "path": "/api/cron/reconcile-payments",
-    "schedule": "0 3 * * *"
-  }]
+  "crons": [
+    { "path": "/api/cron/reconcile-payments", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/expire-subscriptions", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/subscription-expiry-reminders", "schedule": "0 5 * * *" },
+    { "path": "/api/cron/renewal-reminders", "schedule": "0 6 * * *" }
+  ]
 }

@@ -16,7 +16,9 @@ interface Payment {
 
 interface Subscription {
   status: string;
+  effectiveStatus: 'active' | 'expiring_soon' | 'expired' | 'cancelled' | 'past_due';
   expires_at: string | null;
+  daysRemaining: number | null;
 }
 
 export default function BillingPage() {
@@ -43,7 +45,35 @@ export default function BillingPage() {
         .order('updated_at', { ascending: false })
         .limit(1);
       const sub = (subArr && subArr.length > 0) ? subArr[0] : null;
-      if (sub) setSubscription(sub as Subscription);
+      if (sub) {
+        const subRow = sub as any;
+        const expiresAt = subRow.expires_at || null;
+        const now = new Date();
+        let effectiveStatus: Subscription['effectiveStatus'] = 'expired';
+        if (subRow.status === 'cancelled') {
+          effectiveStatus = 'cancelled';
+        } else if (subRow.status === 'past_due') {
+          effectiveStatus = 'past_due';
+        } else if (expiresAt) {
+          const expiry = new Date(expiresAt);
+          if (expiry > now) {
+            const horizon = new Date(now.getTime());
+            horizon.setDate(horizon.getDate() + 7);
+            effectiveStatus = expiry <= horizon ? 'expiring_soon' : 'active';
+          } else {
+            effectiveStatus = 'expired';
+          }
+        }
+        const daysRemaining = expiresAt
+          ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          : null;
+        setSubscription({
+          status: subRow.status,
+          effectiveStatus,
+          expires_at: expiresAt,
+          daysRemaining,
+        });
+      }
 
       const { data: pays } = await supabase
         .from('payments')
@@ -66,7 +96,13 @@ export default function BillingPage() {
     );
   }
 
-  const statusKey = (status: string) => `billing.${status === 'active' ? 'active' : 'inactive'}`;
+  const statusLabel = (sub: Subscription) => {
+    if (sub.effectiveStatus === 'active') return t('billing.active', language);
+    if (sub.effectiveStatus === 'expiring_soon') return language === 'rw' ? 'Izera vuba' : 'Expiring Soon';
+    if (sub.effectiveStatus === 'expired') return language === 'rw' ? 'Yarangiye' : 'Expired';
+    if (sub.effectiveStatus === 'cancelled') return language === 'rw' ? 'Byakuweho' : 'Cancelled';
+    return t('billing.inactive', language);
+  };
 
   return (
     <div className="container py-12 md:py-16 max-w-3xl">
@@ -80,12 +116,19 @@ export default function BillingPage() {
         {subscription ? (
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xl font-semibold">{t(statusKey(subscription.status), language)}</div>
-              {subscription.expires_at && (
+              <div className="text-xl font-semibold">{statusLabel(subscription)}</div>
+              {subscription.effectiveStatus === 'expired' && subscription.expires_at ? (
+                <div className="text-sm text-muted">{language === 'rw' ? 'Byarangiye ku' : 'Expired on'} {new Date(subscription.expires_at).toLocaleDateString()}</div>
+              ) : subscription.expires_at ? (
                 <div className="text-sm text-muted">{t('billing.renews', language)} {new Date(subscription.expires_at).toLocaleDateString()}</div>
-              )}
+              ) : null}
             </div>
-            <Link href="/pricing" className="text-sm text-primary hover:underline">{t('billing.changePlan', language)}</Link>
+            <div className="flex gap-3">
+              {(subscription.effectiveStatus === 'expired' || subscription.effectiveStatus === 'cancelled') && (
+                <Link href="/pricing" className="text-sm text-primary hover:underline font-semibold">{language === 'rw' ? 'Kongera gushyura' : 'Renew Plan'}</Link>
+              )}
+              <Link href="/pricing" className="text-sm text-primary hover:underline">{t('billing.changePlan', language)}</Link>
+            </div>
           </div>
         ) : (
           <div>
