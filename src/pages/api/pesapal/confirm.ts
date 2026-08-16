@@ -165,8 +165,8 @@ async function processPayment(
       } catch {}
     }
 
-    await logEvent('confirm_failed', { orderTrackingId, merchantRef });
-    return res.status(200).json({ ok: true, status: 'failed', statusDesc });
+    await logEvent('confirm_failed', { orderTrackingId, merchantRef, statusDesc, description: status?.raw?.description });
+    return res.status(200).json({ ok: true, status: 'failed', statusDesc, description: status?.raw?.description || null });
   }
 
   // Still pending

@@ -36,6 +36,7 @@ export default function PaymentCallbackPage() {
           const data = await res.json();
           const confirmStatus = (data.status || '').toLowerCase();
           const statusDesc = (data.statusDesc || '').toUpperCase();
+          const failDescription = data.description || '';
 
           if (confirmStatus === 'succeeded' || confirmStatus === 'already_succeeded' || statusDesc.includes('COMPLETED') || statusDesc.includes('SUCCESS')) {
             setStatus('success');
@@ -44,7 +45,12 @@ export default function PaymentCallbackPage() {
             return;
           } else if (confirmStatus === 'failed' || statusDesc.includes('FAILED') || statusDesc.includes('INVALID')) {
             setStatus('failed');
-            setMessage(language === 'rw' ? 'Ubwishyu ntibwagenze neza. Gerageza ukundi.' : 'Payment failed. Please try again.');
+            const bankMessage = failDescription
+              ? failDescription
+              : language === 'rw'
+                ? 'Ubwishyu ntibwagenze neza. Gerageza ukundi cyangwa se hamagara banki yawe.'
+                : 'Payment failed. Please try again or contact your bank.';
+            setMessage(bankMessage);
             setLoading(false);
             return;
           } else {
