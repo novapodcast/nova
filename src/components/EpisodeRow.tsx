@@ -39,7 +39,7 @@ export default function EpisodeRow({ data, rightSlot, onPlay, bodyBelow }: Episo
   const podTitle = (language === 'rw' ? data.podcast_title_rw : data.podcast_title_en) || data.podcast_title_en || '';
 
   const content = (
-    <div className="flex items-start gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 ring-1 ring-white/10 hover:ring-white/20 transition group">
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 ring-1 ring-white/10 hover:ring-white/20 transition group">
       {/* Thumbnail */}
       <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-black/40 ring-1 ring-white/10">
         {data.cover_image_url && (
@@ -50,7 +50,7 @@ export default function EpisodeRow({ data, rightSlot, onPlay, bodyBelow }: Episo
       {onPlay && (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPlay(); }}
-          className="w-10 h-10 rounded-full self-center flex-shrink-0 flex items-center justify-center bg-white/10 text-white hover:bg-primary hover:text-black transition"
+          className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center bg-white/10 text-white hover:bg-primary hover:text-black transition"
           aria-label="Play"
         >
           <svg className="w-4.5 h-4.5 ml-0.5" viewBox="0 0 24 24" fill="currentColor">

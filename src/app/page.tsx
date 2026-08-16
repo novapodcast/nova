@@ -46,7 +46,7 @@ export default function HomePage() {
   const { language } = useLanguage();
   const [featuredPodcasts, setFeaturedPodcasts] = useState<Podcast[]>([]);
   const [slides, setSlides] = useState<CarouselSlide[]>([]);
-  const [metrics, setMetrics] = useState<{ viewers: number; episodes: number; minutes_listened: number; categories: { name_en: string; name_rw: string }[] } | null>(null);
+  const [metrics, setMetrics] = useState<{ viewers: number; episodes: number; minutes_listened: number; categories: { id: string; name_en: string; name_rw: string }[] } | null>(null);
   const [continueItems, setContinueItems] = useState<ContinueListeningItem[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -95,27 +95,29 @@ export default function HomePage() {
       {/* Hero Carousel */}
       <HeroCarousel language={language} slides={slides} />
 
-      {/* Traffic indicators + Platform categories */}
+      {/* Traffic indicators (authenticated users only) + Platform categories */}
       <section className="container py-8 md:py-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
-          {[{
-            labelRw: 'Abarebye', labelEn: 'Viewers', value: metrics?.viewers
-          },{ labelRw: 'Ibice byashyizweho', labelEn: 'Episodes uploaded', value: metrics?.episodes },{ labelRw: 'Iminota yumviswe', labelEn: 'Minutes listened', value: metrics?.minutes_listened }].map((card, i) => (
-            <div key={i} className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
-              {card.value == null ? (
-                <div>
-                  <div className="h-8 w-24 bg-white/5 rounded animate-pulse" />
-                  <div className="h-3 w-32 bg-white/5 rounded mt-2 animate-pulse" />
-                </div>
-              ) : (
-                <>
-                  <div className="text-2xl md:text-3xl font-extrabold text-white">{new Intl.NumberFormat('en-US', { notation: 'compact' }).format(card.value)}+</div>
-                  <div className="text-sm text-muted mt-1">{language === 'rw' ? card.labelRw : card.labelEn}</div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
+        {isLoggedIn && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
+            {[{
+              labelRw: 'Abarebye', labelEn: 'Viewers', value: metrics?.viewers
+            },{ labelRw: 'Ibice byashyizweho', labelEn: 'Episodes uploaded', value: metrics?.episodes },{ labelRw: 'Iminota yumviswe', labelEn: 'Minutes listened', value: metrics?.minutes_listened }].map((card, i) => (
+              <div key={i} className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
+                {card.value == null ? (
+                  <div>
+                    <div className="h-8 w-24 bg-white/5 rounded animate-pulse" />
+                    <div className="h-3 w-32 bg-white/5 rounded mt-2 animate-pulse" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl md:text-3xl font-extrabold text-white">{new Intl.NumberFormat('en-US', { notation: 'compact' }).format(card.value)}+</div>
+                    <div className="text-sm text-muted mt-1">{language === 'rw' ? card.labelRw : card.labelEn}</div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {(!metrics || !metrics.categories) ? (
             <>

@@ -38,14 +38,14 @@ export async function GET(_request: NextRequest) {
     if (!viewers && fallbackViewers) viewers = fallbackViewers;
 
     // Also return categories list for homepage chips
-    let categories: { name_en: string; name_rw: string }[] = [];
+    let categories: { id: string; name_en: string; name_rw: string }[] = [];
     if (supabaseUrl && (serviceKey || anonKey)) {
       const client = createClient(supabaseUrl, serviceKey || anonKey, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       });
       const { data: cats } = await client
         .from('categories')
-        .select('name_en, name_rw')
+        .select('id, name_en, name_rw')
         .order('name_en', { ascending: true });
       categories = (cats || []) as any;
     }

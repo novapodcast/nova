@@ -358,14 +358,13 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
             <div className="space-y-2">
               {episodes.map((ep, idx) => {
                 const epTitle = (language === 'rw' ? ep.title_rw : ep.title_en) || ep.title_en || ep.title_rw || t('common.untitled', language);
-                const epDesc = (language === 'rw' ? ep.description_rw : ep.description_en) || '';
                 const isCurrentEpisode = currentEpisode?.id === ep.id;
                 const episodeNum = ep.episode_number ?? idx + 1;
 
                 return (
                   <div
                     key={ep.id}
-                    className={`flex gap-3 rounded-xl p-3 ring-1 transition-all ${
+                    className={`flex items-center gap-3 rounded-xl p-3 ring-1 transition-all ${
                       isCurrentEpisode 
                         ? 'bg-primary/10 ring-primary/30' 
                         : 'bg-[var(--surface)] ring-white/5 hover:ring-white/15'
@@ -388,7 +387,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                     <button
                       onClick={() => playEpisode(ep)}
                       disabled={!ep.audio_url}
-                      className={`relative w-12 h-12 rounded-full self-center flex-shrink-0 flex items-center justify-center transition-all ${
+                      className={`relative w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center transition-all ${
                         ep.audio_url 
                           ? isCurrentEpisode && isPlaying
                             ? 'bg-primary text-black'
@@ -435,28 +434,15 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                       <h3 className={`font-semibold line-clamp-1 ${isCurrentEpisode ? 'text-primary' : 'text-white'}`}>
                         {epTitle}
                       </h3>
-                      {epDesc && (
-                        <p className="text-sm text-muted line-clamp-1 mt-0.5 leading-relaxed">{epDesc}</p>
+                      {!ep.audio_url && (
+                        <p className="text-xs text-amber-500/80 mt-0.5">{t('podcasts.comingSoon', language)}</p>
                       )}
-                      <div className="flex items-center gap-3 text-xs text-muted mt-2">
-                        {ep.duration_seconds != null && (
-                          <span className="flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {formatDuration(ep.duration_seconds)}
-                          </span>
-                        )}
-                        {!ep.audio_url && (
-                          <span className="text-amber-500/80">{t('podcasts.comingSoon', language)}</span>
-                        )}
-                      </div>
                     </div>
 
                     {/* Link to full episode page */}
                     <Link
                       href={`/episodes/${ep.id}`}
-                      className="self-center p-2 rounded-lg text-muted hover:text-white hover:bg-white/5 transition"
+                      className="flex-shrink-0 p-2 rounded-lg text-muted hover:text-white hover:bg-white/5 transition"
                       title={t('podcasts.viewDetails', language)}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
