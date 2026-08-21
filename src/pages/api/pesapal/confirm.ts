@@ -124,8 +124,26 @@ async function processPayment(
   orderTrackingId: string,
   res: NextApiResponse
 ) {
-  // Already succeeded — idempotent return
+  // Already succeeded — verify subscription is active, re-activate if not
   if (payment.status === 'succeeded') {
+    if (payment.user_id && supabaseAdmin) {
+      const { data: sub } = await supabaseAdmin
+        .from('user_subscriptions')
+        .select('id, status, expires_at')
+        .eq('user_id', payment.user_id)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      const subRow = sub && sub.length > 0 ? sub[0] as any : null;
+      const isExpired = !subRow || subRow.status === 'expired' ||
+        (subRow.expires_at && new Date(subRow.expires_at) <= new Date());
+      if (isExpired) {
+        const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
+        await logEvent('confirm_reactivation', {
+          orderTrackingId, merchantRef, userId: payment.user_id,
+          activated: !!newSub, expires_at: newSub?.expires_at || null,
+        });
+      }
+    }
     return res.status(200).json({ ok: true, status: 'already_succeeded', statusDesc });
   }
 
@@ -138,8 +156,10 @@ async function processPayment(
     if (pErr) console.warn('[confirm][payment][update][warn]', pErr.message);
 
     // Activate subscription (+1 month default; could be improved with plan duration)
+    let activationOk = false;
     if (payment.user_id) {
-      const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0, 1);
+      const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
+      activationOk = !!newSub;
       await recordBillingHistory(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF', 1);
       await sendNotifications(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF');
 
@@ -154,7 +174,10 @@ async function processPayment(
       }
     }
 
-    await logEvent('confirm_success', { orderTrackingId, merchantRef, userId: payment.user_id });
+    await logEvent('confirm_success', { orderTrackingId, merchantRef, userId: payment.user_id, activationOk });
+    if (!activationOk) {
+      return res.status(200).json({ ok: false, status: 'payment_succeeded_activation_failed', statusDesc });
+    }
     return res.status(200).json({ ok: true, status: 'succeeded', statusDesc });
   }
 

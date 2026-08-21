@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     const clientForRead = getAdminClient(adminClient, userClient);
 
-    // Parse date filters (fallback to last 30 days)
+    // Parse date filters (fallback to last 30 days for date-scoped metrics)
     const { searchParams } = new URL(request.url);
     const endParam = searchParams.get('end');
     const startParam = searchParams.get('start');
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     const startAt = startParam ? new Date(startParam) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const startISO = startAt.toISOString();
     const endISO = endAt.toISOString();
+    const nowISO = new Date().toISOString();
 
     // Fetch all metrics with error handling
     const { count: totalUsers, error: usersError } = await clientForRead
@@ -46,15 +47,61 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching recent signups:', signupsError);
     }
 
+    // Active subscriptions: must have status='active' AND expires_at in the future (effective active)
     const { count: activeSubscriptions, error: subsError } = await clientForRead
       .from('user_subscriptions')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .gt('expires_at', nowISO);
     
     if (subsError) {
       console.error('Error fetching active subscriptions:', subsError);
     }
 
+    // Expired subscriptions: status='expired' OR status='active' but expires_at has passed
+    const { count: expiredSubscriptions, error: expiredSubsError } = await clientForRead
+      .from('user_subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'expired');
+    
+    if (expiredSubsError) {
+      console.error('Error fetching expired subscriptions:', expiredSubsError);
+    }
+
+    // Also count active-but-past-expiry as effectively expired
+    const { count: activeButExpired, error: activeButExpiredError } = await clientForRead
+      .from('user_subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active')
+      .lte('expires_at', nowISO);
+    
+    if (activeButExpiredError) {
+      console.error('Error fetching active-but-expired subscriptions:', activeButExpiredError);
+    }
+
+    const totalExpiredSubscriptions = (expiredSubscriptions || 0) + (activeButExpired || 0);
+
+    // Total payment count (all succeeded, all time)
+    const { count: paymentCount, error: paymentCountError } = await clientForRead
+      .from('payments')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'succeeded');
+    
+    if (paymentCountError) {
+      console.error('Error fetching payment count:', paymentCountError);
+    }
+
+    // ALL succeeded payments for total revenue (not date-filtered)
+    const { data: allPayments, error: allPaymentsError } = await clientForRead
+      .from('payments')
+      .select('amount, currency, status, created_at, user_id')
+      .eq('status', 'succeeded');
+    
+    if (allPaymentsError) {
+      console.error('Error fetching all payments:', allPaymentsError);
+    }
+
+    // Date-filtered payments for date-scoped metrics
     const { data: payments, error: paymentsError } = await clientForRead
       .from('payments')
       .select('amount, currency, status, created_at, user_id')
@@ -63,10 +110,13 @@ export async function GET(request: NextRequest) {
       .lte('created_at', endISO);
     
     if (paymentsError) {
-      console.error('Error fetching payments:', paymentsError);
+      console.error('Error fetching date-filtered payments:', paymentsError);
     }
     
-    const totalRevenue = payments?.reduce((sum: number, p: any) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
+    // Total revenue from ALL succeeded payments (all time)
+    const totalRevenue = allPayments?.reduce((sum: number, p: any) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
+    // Date-filtered revenue
+    const periodRevenue = payments?.reduce((sum: number, p: any) => sum + (p.currency === 'RWF' ? p.amount || 0 : 0), 0) || 0;
 
     const { count: totalEpisodes, error: episodesError } = await clientForRead
       .from('episodes')
@@ -125,12 +175,12 @@ export async function GET(request: NextRequest) {
       if (rank !== undefined && rank > 0) premiumEpisodes++;
     });
 
-    // Revenue by plan: map each payment to the user's subscription plan
-    const payingUserIds = Array.from(new Set(payments?.map((p: any) => p.user_id).filter(Boolean) || []));
+    // Revenue by plan: use ALL succeeded payments, map each to the user's subscription plan
+    const allPayingUserIds = Array.from(new Set(allPayments?.map((p: any) => p.user_id).filter(Boolean) || []));
     const { data: subsWithPlan } = await clientForRead
       .from('user_subscriptions')
       .select('user_id, plan_id')
-      .in('user_id', payingUserIds.length ? payingUserIds : ['no-users']);
+      .in('user_id', allPayingUserIds.length ? allPayingUserIds : ['no-users']);
     const planIds = Array.from(new Set(subsWithPlan?.map((s: any) => s.plan_id).filter(Boolean) || []));
     const { data: tiers } = await clientForRead
       .from('pricing_tiers')
@@ -140,7 +190,7 @@ export async function GET(request: NextRequest) {
     const userPlan = new Map<string, string>((subsWithPlan || []).map((s: any) => [s.user_id, tierNames.get(s.plan_id) || 'Unknown']));
 
     const revenueByPlan: Record<string, { revenue: number; count: number }> = {};
-    payments?.forEach((p: any) => {
+    allPayments?.forEach((p: any) => {
       const plan: string = userPlan.get(p.user_id) || 'Unknown';
       if (!revenueByPlan[plan]) {
         revenueByPlan[plan] = { revenue: 0, count: 0 };
@@ -234,7 +284,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       totalUsers: totalUsers || 0,
       activeSubscriptions: activeSubscriptions || 0,
+      expiredSubscriptions: totalExpiredSubscriptions,
       totalRevenue,
+      periodRevenue,
+      paymentCount: paymentCount || 0,
       totalEpisodes: totalEpisodes || 0,
       premiumEpisodes: premiumEpisodes || 0,
       recentSignups: recentSignups || 0,

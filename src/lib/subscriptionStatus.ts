@@ -23,6 +23,10 @@ export function computeEffectiveStatus(
 ): EffectiveStatus {
   if (storedStatus === 'cancelled') return 'cancelled';
   if (storedStatus === 'past_due') return 'past_due';
+  if (storedStatus === 'trial') {
+    if (!expiresAt) return 'active';
+    return new Date(expiresAt) > now ? 'active' : 'expired';
+  }
 
   if (!expiresAt) {
     return storedStatus === 'active' ? 'active' : 'expired';

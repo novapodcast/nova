@@ -1,24 +1,27 @@
 import { supabaseAdmin } from './supabaseAdmin';
 
-export async function findPlanIdForAmount(amount: number = 100): Promise<string | null> {
+export async function findPlanIdForAmount(amount: number = 100): Promise<{ id: string; duration_months: number } | null> {
   if (!supabaseAdmin) return null;
   const { data: tiers } = await supabaseAdmin
     .from('pricing_tiers')
-    .select('id, price_rwf')
+    .select('id, price_rwf, duration_months')
     .order('price_rwf', { ascending: true });
   if (!tiers || tiers.length === 0) return null;
   const match = tiers.find((t: any) => t.price_rwf == amount);
-  return (match || tiers[0]).id as string;
+  const tier = match || tiers[0];
+  return { id: tier.id as string, duration_months: (tier as any).duration_months || 1 };
 }
 
 export async function activateOrExtendSubscription(
   userId: string,
   amount: number = 100,
-  durationMonths: number = 1
+  durationMonthsOverride?: number
 ): Promise<{ status: string; expires_at: string } | null> {
   if (!supabaseAdmin) return null;
 
-  const planId = await findPlanIdForAmount(amount);
+  const planInfo = await findPlanIdForAmount(amount);
+  const planId = planInfo?.id || null;
+  const durationMonths = durationMonthsOverride || planInfo?.duration_months || 1;
 
   const { data: existingSubs } = await supabaseAdmin
     .from('user_subscriptions')
@@ -32,7 +35,11 @@ export async function activateOrExtendSubscription(
   }
 
   const current = existingSubs && existingSubs.length > 0 ? existingSubs[0] : null;
-  const base = current?.expires_at ? new Date(current.expires_at) : new Date();
+  const now = new Date();
+  const oldExpiry = current?.expires_at ? new Date(current.expires_at) : null;
+  // For renewals after expiry, base the new period on NOW, not the old expiry.
+  // For active subscriptions, extend from the current expiry (preserves remaining time).
+  const base = oldExpiry && oldExpiry > now ? oldExpiry : now;
   const next = new Date(base.getTime());
   next.setMonth(next.getMonth() + durationMonths);
 

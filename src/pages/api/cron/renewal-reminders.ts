@@ -31,6 +31,8 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const now = new Date();
+  console.log('[renewal-reminders] cron started at', now.toISOString());
+
   const since = new Date(now.getTime());
   since.setDate(since.getDate() - 3);
 
@@ -40,7 +42,12 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     .eq('status', 'expired')
     .gte('expires_at', since.toISOString());
 
-  if (!subs?.length) return res.status(200).json({ ok: true, count: 0, sent: 0 });
+  if (!subs?.length) {
+    console.log('[renewal-reminders] no recently expired subscriptions found');
+    return res.status(200).json({ ok: true, count: 0, sent: 0 });
+  }
+
+  console.log('[renewal-reminders] scanned', subs.length, 'subscriptions expired within last 3 days');
 
   const userIds = subs.map((s: any) => s.user_id);
   const { data: tokens } = await supabaseAdmin
@@ -71,5 +78,6 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   }
 
   try { await supabaseAdmin.from('webhook_events').insert({ provider: 'ops', type: 'cron_renewal_reminders_sent', payload: { candidates: subs.length, sent } }); } catch {}
+  console.log('[renewal-reminders] done: candidates', subs.length, 'sent', sent);
   res.status(200).json({ ok: true, candidates: subs.length, sent });
 }

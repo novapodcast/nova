@@ -33,6 +33,8 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const now = new Date();
+  console.log('[expiry-reminders] cron started at', now.toISOString());
+
   const maxHorizon = new Date(now.getTime());
   maxHorizon.setDate(maxHorizon.getDate() + 7);
   maxHorizon.setHours(23, 59, 59, 999);
@@ -44,7 +46,12 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     .lte('expires_at', maxHorizon.toISOString())
     .gt('expires_at', now.toISOString());
 
-  if (!subs?.length) return res.status(200).json({ ok: true, count: 0, sent: 0 });
+  if (!subs?.length) {
+    console.log('[expiry-reminders] no eligible subscriptions found');
+    return res.status(200).json({ ok: true, count: 0, sent: 0 });
+  }
+
+  console.log('[expiry-reminders] scanned', subs.length, 'active subscriptions expiring within 7 days');
 
   const userIds = subs.map((s: any) => s.user_id);
   const { data: tokens } = await supabaseAdmin
@@ -107,5 +114,6 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     });
   } catch {}
 
+  console.log('[expiry-reminders] done: candidates', subs.length, 'sent', sent);
   res.status(200).json({ ok: true, candidates: subs.length, sent });
 }

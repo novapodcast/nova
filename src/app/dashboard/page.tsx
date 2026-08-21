@@ -94,12 +94,9 @@ export default function DashboardPage() {
         .eq('email', email)
         .single();
 
-      const subPromise = supabase
-        .from('user_subscriptions')
-        .select('status, expires_at, current_period_end, plan_id')
-        .eq('user_id', sessionData.session.user.id)
-        .order('updated_at', { ascending: false })
-        .limit(1);
+      const subPromise = fetch('/api/subscription-status', {
+        headers: { Authorization: `Bearer ${token}` },
+      }).then((r) => r.ok ? r.json() : null).catch(() => null);
 
       const analyticsPromise = fetch('/api/analytics/user', {
         headers: { Authorization: `Bearer ${token}` },
@@ -109,7 +106,7 @@ export default function DashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       }).then((r) => r.ok ? r.json() : null).catch(() => null);
 
-      const [profileRes, subRes, analyticsData, recsData] = await Promise.all([
+      const [profileRes, subData, analyticsData, recsData] = await Promise.all([
         profilePromise, subPromise, analyticsPromise, recsPromise,
       ]);
 
@@ -117,44 +114,13 @@ export default function DashboardPage() {
 
       if (profileRes.data) setProfile(profileRes.data as UserProfile);
 
-      const subData = (subRes.data && subRes.data.length > 0) ? subRes.data[0] : null;
       if (subData) {
-        let planName = 'Unknown';
-        if ((subData as any).plan_id) {
-          const { data: tier } = await supabase
-            .from('pricing_tiers')
-            .select('display_name_en, plan_name')
-            .eq('id', (subData as any).plan_id)
-            .single();
-          if (tier) planName = (tier as any).display_name_en || (tier as any).plan_name || 'Unknown';
-        }
-        if (planName === 'Unknown' && subData.status === 'active') planName = 'Active subscription';
-        const expiresAt = (subData as any).expires_at || (subData as any).current_period_end || null;
-        const now = new Date();
-        let effectiveStatus: Subscription['effectiveStatus'] = 'expired';
-        if (subData.status === 'cancelled') {
-          effectiveStatus = 'cancelled';
-        } else if (subData.status === 'past_due') {
-          effectiveStatus = 'past_due';
-        } else if (expiresAt) {
-          const expiry = new Date(expiresAt);
-          if (expiry > now) {
-            const horizon = new Date(now.getTime());
-            horizon.setDate(horizon.getDate() + 7);
-            effectiveStatus = expiry <= horizon ? 'expiring_soon' : 'active';
-          } else {
-            effectiveStatus = 'expired';
-          }
-        }
-        const daysRemaining = expiresAt
-          ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-          : null;
         setSubscription({
-          plan_name: planName,
+          plan_name: subData.planName || 'Unknown',
           status: subData.status,
-          effectiveStatus,
-          expires_at: expiresAt,
-          daysRemaining,
+          effectiveStatus: subData.effectiveStatus,
+          expires_at: subData.expiresAt,
+          daysRemaining: subData.daysRemaining,
         });
       }
 

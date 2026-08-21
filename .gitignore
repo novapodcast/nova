@@ -21,3 +21,5 @@ Thumbs.db
 
 # TypeScript build info
 tsconfig.tsbuildinfo
+
+.vercel

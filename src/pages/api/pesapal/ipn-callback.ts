@@ -69,6 +69,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (upperStatus?.includes('COMPLETED')) {
       const existing = await findPayment();
       if (existing?.status === 'succeeded') {
+        // Payment already succeeded — verify subscription is active, re-activate if not
+        if (existing.user_id && supabaseAdmin) {
+          const { data: sub } = await supabaseAdmin
+            .from('user_subscriptions')
+            .select('id, status, expires_at')
+            .eq('user_id', existing.user_id)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          const subRow = sub && sub.length > 0 ? sub[0] as any : null;
+          const isExpired = !subRow || subRow.status === 'expired' ||
+            (subRow.expires_at && new Date(subRow.expires_at) <= new Date());
+          if (isExpired) {
+            await activateOrExtendSubscription(existing.user_id, existing.amount || 0);
+            await logEvent('ipn_reactivation', { merchantRef, orderTrackingId, userId: existing.user_id });
+          }
+        }
         await logEvent('ipn_duplicate', { merchantRef, orderTrackingId });
         return res.status(200).json({ ok: true, duplicate: true });
       }
@@ -84,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const userId = existing.user_id;
         if (userId) {
           // Activate subscription with plan_id
-          await activateOrExtendSubscription(userId, existing.amount || 0, 1);
+          await activateOrExtendSubscription(userId, existing.amount || 0);
 
           // Billing history (idempotent)
           const { data: existingBilling } = await supabaseAdmin.from('billing_history').select('id').eq('transaction_id', merchantRef).limit(1);

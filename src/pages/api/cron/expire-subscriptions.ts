@@ -5,6 +5,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const now = new Date().toISOString();
+  console.log('[expire-subscriptions] cron started at', now);
 
   const { data: expired, error } = await supabaseAdmin
     .from('user_subscriptions')
@@ -17,7 +18,11 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     return res.status(500).json({ ok: false, error: error.message });
   }
 
+  const reviewed = expired?.length || 0;
+  console.log('[expire-subscriptions] reviewed', reviewed, 'subscriptions with status=active and expires_at<=', now);
+
   if (!expired || expired.length === 0) {
+    console.log('[expire-subscriptions] no subscriptions to expire');
     return res.status(200).json({ ok: true, expired: 0 });
   }
 
@@ -27,7 +32,8 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       .from('user_subscriptions')
       .update({ status: 'expired' })
       .eq('id', (sub as any).id)
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .lte('expires_at', now);
 
     if (updateError) {
       console.warn('[expire-subscriptions] update error for', (sub as any).id, updateError.message);
@@ -40,9 +46,10 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     await supabaseAdmin.from('webhook_events').insert({
       provider: 'ops',
       type: 'cron_expire_subscriptions',
-      payload: { reviewed: expired.length, updated, runAt: now },
+      payload: { reviewed, updated, runAt: now },
     });
   } catch {}
 
-  res.status(200).json({ ok: true, reviewed: expired.length, updated });
+  console.log('[expire-subscriptions] done: reviewed', reviewed, 'updated', updated);
+  res.status(200).json({ ok: true, reviewed, updated });
 }

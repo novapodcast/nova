@@ -40,7 +40,13 @@ export default function PaymentCallbackPage() {
 
           if (confirmStatus === 'succeeded' || confirmStatus === 'already_succeeded' || statusDesc.includes('COMPLETED') || statusDesc.includes('SUCCESS')) {
             setStatus('success');
-            setMessage(language === 'rw' ? 'Ubwishyu bwawe bwagenze neza! Iyandikishe ryawe rikora.' : 'Payment completed successfully! Your subscription is now active.');
+            if (confirmStatus === 'payment_succeeded_activation_failed') {
+              setMessage(language === 'rw'
+                ? 'Ubwishyu bwagenze neza, ariko hari ikibazo mu gushyiriyeho iyandikishe. Tuzagenzura vuba.'
+                : 'Payment received, but there was an issue activating your subscription. We will review it shortly.');
+            } else {
+              setMessage(language === 'rw' ? 'Ubwishyu bwawe bwagenze neza! Iyandikishe ryawe rikora.' : 'Payment completed successfully! Your subscription is now active.');
+            }
             setLoading(false);
             return;
           } else if (confirmStatus === 'failed' || statusDesc.includes('FAILED') || statusDesc.includes('INVALID')) {
