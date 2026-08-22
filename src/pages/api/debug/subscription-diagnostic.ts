@@ -18,9 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const transactionId = (req.query.transactionId as string) || '';
   const orderTrackingId = (req.query.orderTrackingId as string) || '';
   const confirmationCode = (req.query.confirmationCode as string) || '';
+  const idempotencyKey = (req.query.idempotencyKey as string) || '';
 
-  if (!userId && !transactionId && !orderTrackingId && !confirmationCode) {
-    return res.status(400).json({ error: 'Provide userId, transactionId, orderTrackingId, or confirmationCode query param' });
+  if (!userId && !transactionId && !orderTrackingId && !confirmationCode && !idempotencyKey) {
+    return res.status(400).json({ error: 'Provide userId, transactionId, orderTrackingId, confirmationCode, or idempotencyKey query param' });
   }
 
   const result: any = { timestamp: new Date().toISOString() };
@@ -31,7 +32,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('payments')
       .select('id, user_id, transaction_id, amount, currency, status, payment_method, created_at, gateway_status, idempotency_key')
       .eq('transaction_id', transactionId)
-      .single();
+      .maybeSingle();
+    result.payment = payment || null;
+    if (payment?.user_id && !userId) {
+      result.inferredUserId = payment.user_id;
+    }
+  }
+
+  // If idempotencyKey provided, look up payment by idempotency_key
+  if (!result.payment && idempotencyKey) {
+    const { data: payment } = await supabaseAdmin
+      .from('payments')
+      .select('id, user_id, transaction_id, amount, currency, status, payment_method, created_at, gateway_status, idempotency_key')
+      .eq('idempotency_key', idempotencyKey)
+      .limit(1)
+      .maybeSingle();
     result.payment = payment || null;
     if (payment?.user_id && !userId) {
       result.inferredUserId = payment.user_id;
@@ -67,7 +82,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const targetUserId = userId || result.inferredUserId;
-  if (!targetUserId) {
+
+  // If still no targetUserId but idempotencyKey looks like {uuid}-{timestamp}-{random},
+  // extract the UUID portion as a fallback
+  let effectiveUserId = targetUserId;
+  if (!effectiveUserId && idempotencyKey) {
+    const uuidMatch = idempotencyKey.match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    if (uuidMatch) {
+      effectiveUserId = uuidMatch[1];
+      result.inferredUserId = effectiveUserId;
+      result.note = `No payment found by idempotency_key; extracted userId from key pattern for further lookup.`;
+    }
+  }
+
+  if (!effectiveUserId) {
     return res.status(200).json(result);
   }
 
@@ -75,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: allSubs } = await supabaseAdmin
     .from('user_subscriptions')
     .select('id, status, expires_at, plan_id, trial_end, created_at, updated_at')
-    .eq('user_id', targetUserId)
+    .eq('user_id', effectiveUserId)
     .order('updated_at', { ascending: false });
 
   result.allSubscriptions = allSubs || [];
@@ -108,7 +136,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: payments } = await supabaseAdmin
     .from('payments')
     .select('id, transaction_id, amount, currency, status, created_at, payment_method')
-    .eq('user_id', targetUserId)
+    .eq('user_id', effectiveUserId)
     .order('created_at', { ascending: false })
     .limit(10);
   result.payments = payments || [];
@@ -117,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: billing } = await supabaseAdmin
     .from('billing_history')
     .select('id, transaction_id, amount, currency, description, created_at')
-    .eq('user_id', targetUserId)
+    .eq('user_id', effectiveUserId)
     .order('created_at', { ascending: false })
     .limit(10);
   result.billingHistory = billing || [];
