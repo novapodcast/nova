@@ -1,27 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
-import { sendPush, sendPaymentSuccessEmail, sendPaymentFailedEmail } from '../../../lib/notify';
+import { logPaymentEvent } from '../../../lib/paymentLog';
+import { findOrCreatePayment, processCompletedPayment, processFailedPayment } from '../../../lib/paymentProcessing';
 import { activateOrExtendSubscription } from '../../../lib/subscriptions';
-
-async function logEvent(type: string, payload: any) {
-  if (!supabaseAdmin) return;
-  await supabaseAdmin.from('webhook_events').insert({ provider: 'pesapal', type, payload });
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const method = req.method || 'GET';
     const payload = method === 'POST' ? req.body : req.query;
 
-    // Pesapal may send orderTrackingId or similar identifiers
     const orderTrackingId = (payload as any).orderTrackingId || (payload as any).OrderTrackingId;
-    await logEvent('ipn_received', { method, payload });
+    await logPaymentEvent('ipn_received', { method, orderTrackingId });
 
     if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
-    // Optionally, fetch status from Pesapal via our status API (client-side can also do this)
-    // Here we update payment + subscription upon success
     let statusDesc = (payload as any).paymentStatusDescription || (payload as any).status || '';
     let merchantRef = (payload as any).merchantReference || '';
 
@@ -30,137 +23,64 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const status = await getTransactionStatus(orderTrackingId.toString());
         statusDesc = status?.paymentStatusDescription || statusDesc;
         merchantRef = status?.merchantReference || merchantRef;
-        await logEvent('ipn_status_fetched', { orderTrackingId, status });
+        await logPaymentEvent('ipn_status_fetched', { orderTrackingId, merchantRef, statusDesc });
       } catch (e) {
-        await logEvent('ipn_status_fetch_error', { orderTrackingId, error: (e as any)?.message });
+        await logPaymentEvent('ipn_status_fetch_error', { orderTrackingId, error: (e as any)?.message });
       }
     }
 
     const upperStatus = statusDesc?.toString().toUpperCase();
 
-    // Helper: find payment by merchantRef, fallback to orderTrackingId in gateway_status
-    const findPayment = async () => {
-      if (merchantRef) {
-        const { data } = await supabaseAdmin!
-          .from('payments')
-          .select('id, user_id, status, amount, currency, transaction_id')
-          .eq('transaction_id', merchantRef)
-          .single();
-        if (data) return data as any;
-      }
-      // Fallback: search by orderTrackingId in gateway_status JSON
-      if (orderTrackingId) {
-        const { data } = await supabaseAdmin!
-          .from('payments')
-          .select('id, user_id, status, amount, currency, transaction_id')
-          .contains('gateway_status', { orderTrackingId: orderTrackingId.toString() })
-          .single();
-        if (data) {
-          // Fix transaction_id for future lookups
-          if (merchantRef && data.transaction_id !== merchantRef) {
-            await supabaseAdmin!.from('payments').update({ transaction_id: merchantRef }).eq('id', data.id);
-          }
-          return data as any;
-        }
-      }
-      return null;
-    };
-
     if (upperStatus?.includes('COMPLETED')) {
-      const existing = await findPayment();
-      if (existing?.status === 'succeeded') {
-        // Payment already succeeded — verify subscription is active, re-activate if not
-        if (existing.user_id && supabaseAdmin) {
+      const status = await getTransactionStatus(orderTrackingId.toString()).catch(() => null);
+      if (!status || !merchantRef) {
+        await logPaymentEvent('ipn_error', { reason: 'cannot_fetch_status', orderTrackingId });
+        return res.status(200).json({ ok: false, error: 'Cannot verify transaction status' });
+      }
+
+      const payment = await findOrCreatePayment(status as any, 'ipn');
+      if (!payment) {
+        await logPaymentEvent('ipn_recovery_failed', { merchantRef, orderTrackingId });
+        return res.status(200).json({ ok: false, status: 'payment_not_found' });
+      }
+
+      if (payment.status === 'succeeded') {
+        if (payment.user_id) {
           const { data: sub } = await supabaseAdmin
             .from('user_subscriptions')
             .select('id, status, expires_at')
-            .eq('user_id', existing.user_id)
+            .eq('user_id', payment.user_id)
             .order('updated_at', { ascending: false })
             .limit(1);
           const subRow = sub && sub.length > 0 ? sub[0] as any : null;
           const isExpired = !subRow || subRow.status === 'expired' ||
             (subRow.expires_at && new Date(subRow.expires_at) <= new Date());
           if (isExpired) {
-            await activateOrExtendSubscription(existing.user_id, existing.amount || 0);
-            await logEvent('ipn_reactivation', { merchantRef, orderTrackingId, userId: existing.user_id });
+            await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
+            await logPaymentEvent('ipn_reactivation', { merchantRef, orderTrackingId, userId: payment.user_id });
           }
         }
-        await logEvent('ipn_duplicate', { merchantRef, orderTrackingId });
+        await logPaymentEvent('ipn_duplicate', { merchantRef, orderTrackingId });
         return res.status(200).json({ ok: true, duplicate: true });
       }
 
-      if (existing) {
-        // Mark payment succeeded
-        const { error: pErr } = await supabaseAdmin
-          .from('payments')
-          .update({ status: 'succeeded', gateway_status: payload })
-          .eq('id', existing.id);
-        if (pErr) console.warn('[payments][update][warn]', pErr.message);
-
-        const userId = existing.user_id;
-        if (userId) {
-          // Activate subscription with plan_id
-          await activateOrExtendSubscription(userId, existing.amount || 0);
-
-          // Billing history (idempotent)
-          const { data: existingBilling } = await supabaseAdmin.from('billing_history').select('id').eq('transaction_id', merchantRef).limit(1);
-          if (!existingBilling || existingBilling.length === 0) {
-            await supabaseAdmin.from('billing_history').insert({
-              user_id: userId,
-              transaction_id: merchantRef,
-              amount: existing.amount || 0,
-              currency: existing.currency || 'RWF',
-              description: 'Subscription payment',
-            });
-          }
-
-          // Success notifications
-          try {
-            const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', userId);
-            const expoTokens = (tokens || []).map((t: any) => t.token);
-            await sendPush(expoTokens, { title: 'Payment received', body: 'Your Nova subscription is active. Enjoy!', data: { type: 'payment_success', transaction_id: merchantRef } });
-          } catch {}
-
-          try {
-            const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
-            const to = profile?.email || '';
-            const userName = profile?.full_name || '';
-            if (to) {
-              await sendPaymentSuccessEmail(to, userName, merchantRef, existing.amount || 0, existing.currency || 'RWF');
-            }
-          } catch {}
+      const result = await processCompletedPayment(payment, status as any, 'ipn');
+      await logPaymentEvent('ipn_processed_success', { merchantRef, orderTrackingId, subscriptionActivated: result.subscriptionActivated });
+    } else if (upperStatus?.includes('FAILED')) {
+      const status = await getTransactionStatus(orderTrackingId.toString()).catch(() => null);
+      if (status && merchantRef) {
+        const payment = await findOrCreatePayment(status as any, 'ipn');
+        if (payment) {
+          await processFailedPayment(payment, status as any, 'ipn');
         }
       }
-      await logEvent('ipn_processed_success', { merchantRef, orderTrackingId, paymentFound: !!existing });
-    } else if (upperStatus?.includes('FAILED')) {
-      const existing = await findPayment();
-      if (existing) {
-        const { error: pErr } = await supabaseAdmin
-          .from('payments')
-          .update({ status: 'failed', gateway_status: payload })
-          .eq('id', existing.id);
-        if (pErr) console.warn('[payments][update][warn]', pErr.message);
-
-        // Send failure email
-        try {
-          const userId = existing.user_id;
-          if (userId) {
-            const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
-            const to = profile?.email || '';
-            const userName = profile?.full_name || '';
-            if (to) {
-              await sendPaymentFailedEmail(to, userName, merchantRef, existing.amount || 0, existing.currency || 'RWF', statusDesc);
-            }
-          }
-        } catch {}
-      }
-
-      await logEvent('ipn_processed_failed', { merchantRef, orderTrackingId, paymentFound: !!existing });
+      await logPaymentEvent('ipn_processed_failed', { merchantRef, orderTrackingId });
     }
 
     return res.status(200).json({ ok: true });
   } catch (e: any) {
     console.error('[ipn-callback] error', e);
+    await logPaymentEvent('ipn_error', { error: e?.message });
     return res.status(500).json({ error: e?.message || 'IPN error' });
   }
 }

@@ -10,8 +10,7 @@ interface PaymentRow {
   amount: number;
   currency: string;
   status: string;
-  method?: string | null;
-  description?: string | null;
+  payment_method?: string | null;
   created_at: string;
 }
 
@@ -33,7 +32,7 @@ export default function BillingHistoryPage() {
         }
         const { data, error } = await supabase
           .from('payments')
-          .select('id, amount, currency, status, method, description, created_at')
+          .select('id, amount, currency, status, payment_method, created_at')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(50);
@@ -78,7 +77,7 @@ export default function BillingHistoryPage() {
           {rows.map((p) => (
             <div key={p.id} className="rounded-xl p-4 bg-[var(--surface)] ring-1 ring-white/5 flex items-center justify-between">
               <div>
-                <div className="text-white font-semibold">{p.description || t('billing.subscriptionPayment', language)}</div>
+                <div className="text-white font-semibold">{t('billing.subscriptionPayment', language)}</div>
                 <div className="text-xs text-muted mt-1">{new Date(p.created_at).toLocaleString()}</div>
               </div>
               <div className="text-right">

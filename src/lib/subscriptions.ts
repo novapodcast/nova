@@ -8,8 +8,8 @@ export async function findPlanIdForAmount(amount: number = 100): Promise<{ id: s
     .order('price_rwf', { ascending: true });
   if (!tiers || tiers.length === 0) return null;
   const match = tiers.find((t: any) => t.price_rwf == amount);
-  const tier = match || tiers[0];
-  return { id: tier.id as string, duration_months: (tier as any).duration_months || 1 };
+  if (!match) return null;
+  return { id: match.id as string, duration_months: (match as any).duration_months || 1 };
 }
 
 export async function activateOrExtendSubscription(
@@ -22,6 +22,10 @@ export async function activateOrExtendSubscription(
   const planInfo = await findPlanIdForAmount(amount);
   const planId = planInfo?.id || null;
   const durationMonths = durationMonthsOverride || planInfo?.duration_months || 1;
+
+  if (!planInfo && !durationMonthsOverride) {
+    console.warn('[activateSubscription] No pricing tier found for amount', amount, '— using default 1 month, no plan_id');
+  }
 
   const { data: existingSubs } = await supabaseAdmin
     .from('user_subscriptions')

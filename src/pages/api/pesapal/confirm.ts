@@ -1,63 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
-import { sendPaymentSuccessEmail, sendPaymentFailedEmail, sendSubscriptionRenewedEmail } from '../../../lib/notify';
+import { logPaymentEvent } from '../../../lib/paymentLog';
+import { findOrCreatePayment, processCompletedPayment, processFailedPayment } from '../../../lib/paymentProcessing';
 import { activateOrExtendSubscription } from '../../../lib/subscriptions';
-
-async function logEvent(type: string, payload: any) {
-  if (!supabaseAdmin) return;
-  try {
-    await supabaseAdmin.from('webhook_events').insert({ provider: 'pesapal', type, payload });
-  } catch {}
-}
-
-async function sendNotifications(userId: string, merchantRef: string, amount: number, currency: string) {
-  if (!supabaseAdmin) return;
-  try {
-    const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', userId);
-    const expoTokens = (tokens || []).map((t: any) => t.token);
-    if (expoTokens.length) {
-      await fetch('https://exp.host/--/api/v2/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(expoTokens.map((to: string) => ({
-          to,
-          title: 'Payment received',
-          body: 'Your Nova subscription is active. Enjoy!',
-          data: { type: 'payment_success', transaction_id: merchantRef },
-          sound: 'default',
-        }))),
-      });
-    }
-  } catch {}
-
-  try {
-    const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', userId).single();
-    if (profile?.email) {
-      await sendPaymentSuccessEmail(profile.email, profile.full_name || '', merchantRef, amount, currency);
-    }
-  } catch (e) {
-    console.warn('[confirm][email][warn]', (e as any)?.message);
-  }
-}
-
-async function recordBillingHistory(userId: string, merchantRef: string, amount: number, currency: string, durationMonths: number) {
-  if (!supabaseAdmin) return;
-  const { data: existingBilling } = await supabaseAdmin
-    .from('billing_history')
-    .select('id')
-    .eq('transaction_id', merchantRef)
-    .limit(1);
-  if (!existingBilling || existingBilling.length === 0) {
-    await supabaseAdmin.from('billing_history').insert({
-      user_id: userId,
-      transaction_id: merchantRef,
-      amount,
-      currency,
-      description: `Subscription payment (${durationMonths} month${durationMonths > 1 ? 's' : ''})`,
-    });
-  }
-}
+import { sendSubscriptionRenewedEmail } from '../../../lib/notify';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -67,142 +14,92 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!orderTrackingId) return res.status(400).json({ error: 'Missing orderTrackingId' });
 
     if (!supabaseAdmin) {
-      return res.status(200).json({ ok: false, note: 'supabaseAdmin not configured - set SUPABASE_SERVICE_ROLE_KEY' });
+      return res.status(500).json({ ok: false, error: 'supabaseAdmin not configured' });
     }
 
-    await logEvent('confirm_start', { orderTrackingId });
+    await logPaymentEvent('confirm_started', { orderTrackingId });
 
-    // 1. Get transaction status from PesaPal
+    // 1. Get transaction status from Pesapal
     const status = await getTransactionStatus(orderTrackingId);
     const statusDesc = (status?.paymentStatusDescription || '').toString().toUpperCase();
     const merchantRef = status?.merchantReference || '';
 
-    await logEvent('confirm_status', { orderTrackingId, merchantRef, statusDesc });
+    await logPaymentEvent('confirm_status_received', { orderTrackingId, merchantRef, statusDesc });
 
     if (!merchantRef) {
       return res.status(200).json({ ok: false, status: 'no_merchant_ref', statusDesc });
     }
 
-    // 2. Find the payment record
-    const { data: payment } = await supabaseAdmin
-      .from('payments')
-      .select('id, user_id, amount, currency, status')
-      .eq('transaction_id', merchantRef)
-      .single();
+    // 2. Find or recover the payment record
+    const payment = await findOrCreatePayment(status as any, 'confirm');
 
     if (!payment) {
-      // Payment row not found — try to find by gateway_status containing the orderTrackingId
-      const { data: altPayment } = await supabaseAdmin
-        .from('payments')
-        .select('id, user_id, amount, currency, status, transaction_id')
-        .contains('gateway_status', { orderTrackingId })
-        .single();
-
-      if (altPayment) {
-        // Update transaction_id to match merchantRef for future lookups
-        await supabaseAdmin.from('payments').update({ transaction_id: merchantRef }).eq('id', altPayment.id);
-        return processPayment(altPayment as any, status, statusDesc, merchantRef, orderTrackingId, res);
-      }
-
-      await logEvent('confirm_payment_not_found', { orderTrackingId, merchantRef });
+      await logPaymentEvent('confirm_recovery_failed', { orderTrackingId, merchantRef, statusDesc });
       return res.status(200).json({ ok: false, status: 'payment_not_found', merchantRef, statusDesc });
     }
 
-    return processPayment(payment as any, status, statusDesc, merchantRef, orderTrackingId, res);
-  } catch (e: any) {
-    console.error('[confirm] error', e);
-    await logEvent('confirm_error', { error: e?.message });
-    return res.status(500).json({ error: e?.message || 'Confirm failed' });
-  }
-}
-
-async function processPayment(
-  payment: { id: string; user_id: string; amount: number; currency: string; status: string },
-  status: any,
-  statusDesc: string,
-  merchantRef: string,
-  orderTrackingId: string,
-  res: NextApiResponse
-) {
-  // Already succeeded — verify subscription is active, re-activate if not
-  if (payment.status === 'succeeded') {
-    if (payment.user_id && supabaseAdmin) {
-      const { data: sub } = await supabaseAdmin
-        .from('user_subscriptions')
-        .select('id, status, expires_at')
-        .eq('user_id', payment.user_id)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      const subRow = sub && sub.length > 0 ? sub[0] as any : null;
-      const isExpired = !subRow || subRow.status === 'expired' ||
-        (subRow.expires_at && new Date(subRow.expires_at) <= new Date());
-      if (isExpired) {
-        const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
-        await logEvent('confirm_reactivation', {
-          orderTrackingId, merchantRef, userId: payment.user_id,
-          activated: !!newSub, expires_at: newSub?.expires_at || null,
-        });
+    // 3. Already succeeded — verify subscription, re-activate if expired
+    if (payment.status === 'succeeded') {
+      if (payment.user_id) {
+        const { data: sub } = await supabaseAdmin
+          .from('user_subscriptions')
+          .select('id, status, expires_at')
+          .eq('user_id', payment.user_id)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        const subRow = sub && sub.length > 0 ? sub[0] as any : null;
+        const isExpired = !subRow || subRow.status === 'expired' ||
+          (subRow.expires_at && new Date(subRow.expires_at) <= new Date());
+        if (isExpired) {
+          const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
+          await logPaymentEvent('confirm_reactivation', {
+            orderTrackingId, merchantRef, userId: payment.user_id,
+            activated: !!newSub, expires_at: newSub?.expires_at || null,
+          });
+        }
       }
+      return res.status(200).json({ ok: true, status: 'already_succeeded', statusDesc });
     }
-    return res.status(200).json({ ok: true, status: 'already_succeeded', statusDesc });
-  }
 
-  if (statusDesc.includes('COMPLETED') || statusDesc.includes('SUCCESS')) {
-    // Update payment to succeeded
-    const { error: pErr } = await supabaseAdmin!
-      .from('payments')
-      .update({ status: 'succeeded', gateway_status: status })
-      .eq('id', payment.id);
-    if (pErr) console.warn('[confirm][payment][update][warn]', pErr.message);
+    // 4. Process based on Pesapal status
+    if (statusDesc.includes('COMPLETED') || statusDesc.includes('SUCCESS')) {
+      const result = await processCompletedPayment(payment, status as any, 'confirm');
 
-    // Activate subscription (+1 month default; could be improved with plan duration)
-    let activationOk = false;
-    if (payment.user_id) {
-      const newSub = await activateOrExtendSubscription(payment.user_id, payment.amount || 0);
-      activationOk = !!newSub;
-      await recordBillingHistory(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF', 1);
-      await sendNotifications(payment.user_id, merchantRef, payment.amount || 0, payment.currency || 'RWF');
-
-      // Send subscription renewed email with new expiry date
-      if (newSub?.expires_at) {
+      if (payment.user_id && result.subscriptionActivated) {
         try {
-          const { data: profile } = await supabaseAdmin!.from('profiles').select('email, full_name').eq('id', payment.user_id).single();
+          const { data: profile } = await supabaseAdmin.from('profiles').select('email, full_name').eq('id', payment.user_id).single();
           if (profile?.email) {
-            await sendSubscriptionRenewedEmail(profile.email, profile.full_name || '', new Date(newSub.expires_at));
+            const { data: sub } = await supabaseAdmin
+              .from('user_subscriptions')
+              .select('expires_at')
+              .eq('user_id', payment.user_id)
+              .order('updated_at', { ascending: false })
+              .limit(1)
+              .single();
+            if (sub?.expires_at) {
+              await sendSubscriptionRenewedEmail(profile.email, profile.full_name || '', new Date(sub.expires_at));
+            }
           }
         } catch {}
       }
+
+      if (!result.subscriptionActivated && payment.user_id) {
+        return res.status(200).json({ ok: false, status: 'payment_succeeded_activation_failed', statusDesc });
+      }
+      return res.status(200).json({ ok: true, status: 'succeeded', statusDesc });
     }
 
-    await logEvent('confirm_success', { orderTrackingId, merchantRef, userId: payment.user_id, activationOk });
-    if (!activationOk) {
-      return res.status(200).json({ ok: false, status: 'payment_succeeded_activation_failed', statusDesc });
+    if (statusDesc.includes('FAILED') || (statusDesc.includes('INVALID') && !JSON.stringify(status?.error || '').toLowerCase().includes('pending'))) {
+      await processFailedPayment(payment, status as any, 'confirm');
+      return res.status(200).json({ ok: true, status: 'failed', statusDesc, description: status?.raw?.description || null });
     }
-    return res.status(200).json({ ok: true, status: 'succeeded', statusDesc });
+
+    // Still pending
+    await logPaymentEvent('confirm_pending', { orderTrackingId, merchantRef, statusDesc });
+    return res.status(200).json({ ok: true, status: 'pending', statusDesc });
+  } catch (e: any) {
+    console.error('[confirm] error', e);
+    await logPaymentEvent('confirm_error', { error: e?.message });
+    return res.status(500).json({ error: e?.message || 'Confirm failed' });
   }
-
-  if (statusDesc.includes('FAILED') || (statusDesc.includes('INVALID') && !JSON.stringify(status?.error || '').toLowerCase().includes('pending'))) {
-    const { error: pErr } = await supabaseAdmin!
-      .from('payments')
-      .update({ status: 'failed', gateway_status: status })
-      .eq('id', payment.id);
-    if (pErr) console.warn('[confirm][payment][update][warn]', pErr.message);
-
-    // Send failure email
-    if (payment.user_id) {
-      try {
-        const { data: profile } = await supabaseAdmin!.from('profiles').select('email, full_name').eq('id', payment.user_id).single();
-        if (profile?.email) {
-          await sendPaymentFailedEmail(profile.email, profile.full_name || '', merchantRef, payment.amount || 0, payment.currency || 'RWF', statusDesc);
-        }
-      } catch {}
-    }
-
-    await logEvent('confirm_failed', { orderTrackingId, merchantRef, statusDesc, description: status?.raw?.description });
-    return res.status(200).json({ ok: true, status: 'failed', statusDesc, description: status?.raw?.description || null });
-  }
-
-  // Still pending
-  await logEvent('confirm_pending', { orderTrackingId, merchantRef, statusDesc });
-  return res.status(200).json({ ok: true, status: 'pending', statusDesc });
 }

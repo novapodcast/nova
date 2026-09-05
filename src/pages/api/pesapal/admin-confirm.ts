@@ -44,13 +44,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .limit(1);
 
     if (!existingBilling || existingBilling.length === 0) {
-      await supabaseAdmin.from('billing_history').insert({
-        user_id: userId,
-        transaction_id: transactionId,
-        amount: amount || payment.amount || 0,
-        currency: currency || payment.currency || 'RWF',
-        description: `Subscription payment (${months} month${months > 1 ? 's' : ''})`,
-      });
+      try {
+        await supabaseAdmin.from('billing_history').insert({
+          user_id: userId,
+          transaction_id: transactionId,
+          amount: amount || payment.amount || 0,
+          currency: currency || payment.currency || 'RWF',
+          description: `Subscription payment (${months} month${months > 1 ? 's' : ''})`,
+        });
+      } catch (billingErr: any) {
+        console.warn(`[admin-confirm] billing_history insert failed (likely concurrent): ${billingErr?.message}`);
+      }
     }
 
     // 4. Send success email

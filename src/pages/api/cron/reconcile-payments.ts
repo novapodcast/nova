@@ -1,72 +1,69 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { getTransactionStatus } from '../../../lib/pesapal';
+import { logPaymentEvent } from '../../../lib/paymentLog';
+import { processCompletedPayment, processFailedPayment } from '../../../lib/paymentProcessing';
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Vercel cron authentication: verify CRON_SECRET
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
-  // Find pending payments older than 10 minutes and reconcile status
   const runStartedAt = new Date().toISOString();
+  await logPaymentEvent('reconciliation_started', { runStartedAt });
+
+  // 1. Find pending payments older than 10 minutes and reconcile status
   const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: pendings } = await supabaseAdmin
     .from('payments')
-    .select('id, transaction_id, gateway_status, user_id, amount, currency')
+    .select('id, transaction_id, order_tracking_id, user_id, amount, currency')
     .eq('status', 'pending')
     .lte('created_at', since);
 
-  if (!pendings?.length) return res.status(200).json({ ok: true, count: 0 });
-
   let updated = 0;
-  for (const p of pendings) {
+  let recovered = 0;
+  let errors = 0;
+
+  for (const p of pendings || []) {
     try {
-      const orderTrackingId = (p as any)?.gateway_status?.orderTrackingId;
-      if (!orderTrackingId) continue;
+      const orderTrackingId = (p as any).order_tracking_id;
+      if (!orderTrackingId) {
+        await logPaymentEvent('reconciliation_skipped', { paymentId: p.id, reason: 'no_order_tracking_id' });
+        continue;
+      }
       const status = await getTransactionStatus(orderTrackingId);
       const statusDesc = (status?.paymentStatusDescription || '').toString().toUpperCase();
-      if (statusDesc.includes('COMPLETED')) {
-        await supabaseAdmin.from('payments').update({ status: 'succeeded', gateway_status: status }).eq('id', p.id);
-        // Extend/create subscription (+1 month) and write billing history similar to IPN
-        const userId = (p as any).user_id as string | null;
-        if (userId) {
-          const { data: current } = await supabaseAdmin
-            .from('user_subscriptions')
-            .select('id, expires_at')
-            .eq('user_id', userId)
-            .single();
-          const base = current?.expires_at ? new Date(current.expires_at) : new Date();
-          const next = new Date(base.getTime());
-          next.setMonth(next.getMonth() + 1);
-          const upsert = { user_id: userId, status: 'active', expires_at: next.toISOString() } as any;
-          if (current?.id) upsert.id = current.id;
-          await supabaseAdmin.from('user_subscriptions').upsert(upsert).select().single();
 
-          await supabaseAdmin.from('billing_history').insert({
-            user_id: userId,
-            transaction_id: (p as any).transaction_id,
-            amount: (p as any).amount || 0,
-            currency: (p as any).currency || 'RWF',
-            description: 'Subscription payment (reconciled)',
-          });
-        }
-        updated++;
+      if (statusDesc.includes('COMPLETED')) {
+        const result = await processCompletedPayment(p as any, status as any, 'reconcile');
+        if (result.ok) updated++;
+        if (result.subscriptionActivated) recovered++;
       } else if (statusDesc.includes('FAILED')) {
-        await supabaseAdmin.from('payments').update({ status: 'failed', gateway_status: status }).eq('id', p.id);
+        await processFailedPayment(p as any, status as any, 'reconcile');
         updated++;
       }
     } catch (e) {
-      // continue
+      errors++;
+      await logPaymentEvent('reconciliation_error', { paymentId: p.id, error: (e as any)?.message });
     }
   }
 
   const runEndedAt = new Date().toISOString();
-  // Observability: log reconciliation run (non-critical)
-  try {
-    await supabaseAdmin.from('webhook_events').insert({
-      provider: 'cron',
-      type: 'reconcile_run',
-      payload: { count: pendings.length, updated, runStartedAt, runEndedAt },
-    });
-  } catch {}
+  await logPaymentEvent('reconciliation_completed', {
+    pendingCount: pendings?.length || 0,
+    updated,
+    recovered,
+    errors,
+    runStartedAt,
+    runEndedAt,
+  });
 
-  res.status(200).json({ ok: true, count: pendings.length, updated });
+  res.status(200).json({ ok: true, pending: pendings?.length || 0, updated, recovered, errors });
 }
