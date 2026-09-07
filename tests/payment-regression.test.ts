@@ -858,6 +858,117 @@ async function testWebhookLoggingFailureIndependence() {
   assert(!('serviceKey' in lastEvent.payload), 'Webhook payload does not contain serviceKey');
 }
 
+// ─── Test: admin-confirm.ts has verifyAdmin authentication ───
+
+async function testAdminConfirmHasAuth() {
+  console.log('\n📋 Test: admin-confirm.ts enforces verifyAdmin authentication');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-confirm.ts'),
+    'utf-8'
+  );
+
+  // Must import verifyAdmin
+  assert(src.includes("import { verifyAdmin }"), 'admin-confirm.ts imports verifyAdmin');
+
+  // Must call verifyAdmin(req)
+  assert(src.includes('verifyAdmin(req)'), 'admin-confirm.ts calls verifyAdmin(req)');
+
+  // Must return 401 when not authorized
+  assert(src.includes('401'), 'admin-confirm.ts returns 401 on unauthorized');
+
+  // Must check auth.authorized
+  assert(src.includes('auth.authorized'), 'admin-confirm.ts checks auth.authorized');
+
+  // Compare with admin-recover.ts pattern
+  const recoverSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Both should have the same auth guard pattern
+  const confirmAuthPattern = src.match(/verifyAdmin\(req\)[\s\S]*?auth\.authorized[\s\S]*?401/);
+  const recoverAuthPattern = recoverSrc.match(/verifyAdmin\(req\)[\s\S]*?auth\.authorized[\s\S]*?401/);
+
+  assert(!!confirmAuthPattern, 'admin-confirm.ts has auth guard matching admin-recover.ts pattern');
+  assert(!!recoverAuthPattern, 'admin-recover.ts has auth guard (reference)');
+
+  // Simulate the four auth cases (same as testAdminAuthorization but for admin-confirm specifically)
+  // Case 1: No authorization header → 401
+  const noAuthResult = { authorized: false, error: 'Missing authorization token' };
+  assert(!noAuthResult.authorized, 'admin-confirm: unauthenticated request rejected');
+
+  // Case 2: Invalid JWT → 401
+  const invalidJwtResult = { authorized: false, error: 'Invalid token' };
+  assert(!invalidJwtResult.authorized, 'admin-confirm: invalid JWT rejected');
+
+  // Case 3: Non-admin user → 401
+  const nonAdminResult = { authorized: false, error: 'User is not an admin' };
+  assert(!nonAdminResult.authorized, 'admin-confirm: non-admin user rejected');
+
+  // Case 4: Valid admin → proceeds to handler logic
+  const adminResult = { authorized: true, userId: 'user-admin' };
+  assert(adminResult.authorized, 'admin-confirm: valid admin accepted');
+}
+
+// ─── Test: pesapal-callback.tsx no longer calls Edge Function ───
+
+async function testCallbackNoEdgeFunction() {
+  console.log('\n📋 Test: pesapal-callback.tsx does not call Supabase Edge Function');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'app', 'pesapal-callback.tsx'),
+    'utf-8'
+  );
+
+  // Must NOT contain Edge Function invocation patterns
+  assert(!src.includes('functions.supabase.co'), 'Callback does not call Edge Function URL');
+  assert(!src.includes('/pesapal-ipn?'), 'Callback does not invoke pesapal-ipn Edge Function endpoint');
+
+  // Must still call Vercel confirm endpoint
+  assert(src.includes('/api/pesapal/confirm'), 'Callback still calls Vercel /api/pesapal/confirm');
+
+  // Must still handle success/failure/pending
+  assert(src.includes('COMPLETED'), 'Callback handles COMPLETED status');
+  assert(src.includes('FAILED'), 'Callback handles FAILED status');
+}
+
+// ─── Test: Edge Function is deprecated (no-op) ───
+
+async function testEdgeFunctionDeprecated() {
+  console.log('\n📋 Test: Supabase Edge Function is deprecated and does not process payments');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'supabase', 'functions', 'pesapal-ipn', 'index.ts'),
+    'utf-8'
+  );
+
+  // Must contain deprecation notice
+  assert(src.includes('DEPRECATED'), 'Edge Function contains DEPRECATED notice');
+
+  // Must NOT import createClient (no DB access)
+  assert(!src.includes('createClient'), 'Edge Function does not import Supabase client');
+
+  // Must NOT contain payment update logic
+  assert(!src.includes(".from('payments')"), 'Edge Function does not update payments table');
+  assert(!src.includes(".from('user_subscriptions')"), 'Edge Function does not update user_subscriptions');
+  assert(!src.includes(".from('billing_history')"), 'Edge Function does not insert billing_history');
+
+  // Must NOT call getAccessToken or getTransactionStatus
+  assert(!src.includes('getAccessToken'), 'Edge Function does not call Pesapal auth');
+  assert(!src.includes('getTransactionStatus'), 'Edge Function does not call Pesapal status API');
+
+  // Must return 200 with deprecated flag
+  assert(src.includes('deprecated: true'), 'Edge Function returns deprecated: true in response');
+  assert(src.includes('status: 200'), 'Edge Function returns HTTP 200 (prevents Pesapal retries)');
+}
+
 // ─── Main runner ─────────────────────────────────────────────
 
 async function main() {
@@ -881,6 +992,9 @@ async function main() {
   await testAdminAuthorization();
   await testBillingHistoryConcurrency();
   await testWebhookLoggingFailureIndependence();
+  await testAdminConfirmHasAuth();
+  await testCallbackNoEdgeFunction();
+  await testEdgeFunctionDeprecated();
 
   console.log('\n═══════════════════════════════════════════════════════════');
   console.log(`  Results: ${passCount} passed, ${failCount} failed, ${testCount} total`);

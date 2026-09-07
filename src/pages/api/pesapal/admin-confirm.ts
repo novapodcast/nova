@@ -1,10 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
+import { verifyAdmin } from '../../../lib/adminAuth';
 import { sendPaymentSuccessEmail } from '../../../lib/notify';
 import { activateOrExtendSubscription } from '../../../lib/subscriptions';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const auth = await verifyAdmin(req);
+  if (!auth.authorized) {
+    return res.status(401).json({ error: auth.error || 'Unauthorized' });
+  }
 
   try {
     const { transactionId, userId, amount, currency, durationMonths } = req.body || {};
