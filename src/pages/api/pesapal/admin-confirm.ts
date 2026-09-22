@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { verifyAdmin } from '../../../lib/adminAuth';
 import { sendPaymentSuccessEmail } from '../../../lib/notify';
 import { activateOrExtendSubscription } from '../../../lib/subscriptions';
+import { logPaymentEvent } from '../../../lib/paymentLog';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -22,25 +23,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Server not configured (SUPABASE_SERVICE_ROLE_KEY missing)' });
     }
 
-    // 1. Update payment to succeeded
-    const { data: payment, error: pErr } = await supabaseAdmin
+    // 1. Fetch the payment record first (without updating)
+    const { data: existingPayment, error: fetchErr } = await supabaseAdmin
       .from('payments')
-      .update({ status: 'succeeded' })
+      .select('id, user_id, amount, currency, status, transaction_id')
       .eq('transaction_id', transactionId)
       .eq('user_id', userId)
-      .select('id, user_id, amount, currency, status')
       .single();
 
-    if (pErr || !payment) {
-      return res.status(404).json({ error: 'Payment not found', detail: pErr?.message });
+    if (fetchErr || !existingPayment) {
+      return res.status(404).json({ error: 'Payment not found', detail: fetchErr?.message });
     }
 
-    // 2. Activate subscription with plan_id
+    // 2. If already succeeded, do NOT re-activate subscription
+    if (existingPayment.status === 'succeeded') {
+      await logPaymentEvent('admin_confirm_duplicate', {
+        paymentId: existingPayment.id,
+        transactionId,
+        userId,
+      });
+      return res.status(200).json({
+        ok: true,
+        status: 'already_succeeded',
+        paymentId: existingPayment.id,
+        subscription: null,
+      });
+    }
+
+    // 3. Conditional update: only transition pending → succeeded
+    const { data: updatedRows, error: updateErr } = await supabaseAdmin
+      .from('payments')
+      .update({ status: 'succeeded', completed_at: new Date().toISOString() })
+      .eq('id', existingPayment.id)
+      .eq('status', 'pending')
+      .select('id, user_id, amount, currency, status');
+
+    if (updateErr || !updatedRows || updatedRows.length === 0) {
+      // Another concurrent call may have already processed this payment,
+      // or the payment was not in 'pending' state.
+      await logPaymentEvent('admin_confirm_conditional_skip', {
+        paymentId: existingPayment.id,
+        transactionId,
+        currentStatus: existingPayment.status,
+      });
+      return res.status(200).json({
+        ok: true,
+        status: 'already_succeeded',
+        paymentId: existingPayment.id,
+        subscription: null,
+      });
+    }
+
+    const payment = updatedRows[0];
+
+    // 4. Activate subscription — only reached if we successfully transitioned pending → succeeded
     const months = durationMonths || 1;
     const subscription = await activateOrExtendSubscription(userId, amount || payment.amount || 0, months);
     if (!subscription) {
       console.warn('[admin-confirm][subscription] failed to activate/extend');
     }
+
+    await logPaymentEvent('admin_confirm_success', {
+      paymentId: payment.id,
+      transactionId,
+      userId,
+      subscriptionActivated: !!subscription,
+    });
 
     // 3. Billing history (idempotent)
     const { data: existingBilling } = await supabaseAdmin

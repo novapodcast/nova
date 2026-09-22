@@ -138,7 +138,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await logPaymentEvent('payment_record_created', { paymentId: paymentRow.id, idempotencyKey, userId: body.userId });
 
-    // 4. Submit order to Pesapal
+    // 4. Validate IPN notification ID before submitting to Pesapal
+    //    An empty notification ID means Pesapal won't send IPN callbacks,
+    //    making payment completion unreliable.
+    if (!body.notificationId || typeof body.notificationId !== 'string' || body.notificationId.trim() === '') {
+      await logPaymentEvent('payment_order_missing_ipn_id', { paymentId: paymentRow.id, idempotencyKey, userId: body.userId });
+      await supabaseAdmin.from('payments').update({ status: 'failed' }).eq('id', paymentRow.id);
+      return res.status(400).json({
+        error: 'Missing or empty IPN notification ID. Payment cannot proceed — IPN registration may have failed.',
+      });
+    }
+
+    // 5. Submit order to Pesapal
     let order: { orderTrackingId: string; merchantReference: string; redirectUrl: string };
     try {
       order = await submitOrderRequest({ ...body, id: idempotencyKey });
@@ -150,7 +161,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await logPaymentEvent('pesapal_order_created', { paymentId: paymentRow.id, orderTrackingId: order.orderTrackingId, merchantReference: order.merchantReference });
 
-    // 5. Update payment with Pesapal response (gateway_status, order_tracking_id)
+    // 6. Update payment with Pesapal response (gateway_status, order_tracking_id)
     //    If this update fails, the payment row still exists in 'pending' state
     //    and can be recovered by the reconciliation cron.
     const { error: updateErr } = await supabaseAdmin
@@ -166,7 +177,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await logPaymentEvent('payment_record_update_failed', { paymentId: paymentRow.id, error: updateErr.message });
     }
 
-    // 6. Return Pesapal order data to mobile app
+    // 7. Return Pesapal order data to mobile app
     res.status(200).json(order);
   } catch (e: any) {
     await logPaymentEvent('payment_order_error', { error: e?.message });

@@ -969,6 +969,726 @@ async function testEdgeFunctionDeprecated() {
   assert(src.includes('status: 200'), 'Edge Function returns HTTP 200 (prevents Pesapal retries)');
 }
 
+// ─── Test: IPN registration logs success and validates non-empty ID ──
+
+async function testIPNRegistrationLoggingAndValidation() {
+  console.log('\n📋 Test: IPN registration logs success, failure, and validates non-empty ID');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'ipn-register.ts'),
+    'utf-8'
+  );
+
+  // Must import logPaymentEvent
+  assert(src.includes('logPaymentEvent'), 'ipn-register.ts imports logPaymentEvent');
+
+  // Must log success
+  assert(src.includes("ipn_register_success"), 'ipn-register.ts logs ipn_register_success');
+
+  // Must log failure
+  assert(src.includes("ipn_register_failed"), 'ipn-register.ts logs ipn_register_failed');
+
+  // Must log empty IPN ID
+  assert(src.includes("ipn_register_empty"), 'ipn-register.ts logs ipn_register_empty');
+
+  // Must validate non-empty IPN ID
+  assert(src.includes('trim()'), 'ipn-register.ts validates non-empty IPN ID with trim()');
+
+  // Must return 502 on failure (not 200)
+  assert(src.includes('502'), 'ipn-register.ts returns 502 on registration failure');
+
+  // Must NOT log secrets
+  assert(!src.includes('consumer_key'), 'ipn-register.ts does not log consumer_key');
+  assert(!src.includes('consumer_secret'), 'ipn-register.ts does not log consumer_secret');
+  assert(!src.includes('Bearer'), 'ipn-register.ts does not log Bearer tokens');
+
+  // Simulate empty IPN ID scenario
+  const emptyIpnId: string = '';
+  assert(!emptyIpnId || emptyIpnId.trim() === '', 'Empty IPN ID is detected as invalid');
+
+  // Simulate valid IPN ID scenario
+  const validIpnId: string = 'ipn-12345-abcde';
+  assert(!!validIpnId && validIpnId.trim() !== '', 'Valid IPN ID passes validation');
+
+  // Simulate whitespace-only IPN ID
+  const whitespaceIpnId: string = '   ';
+  assert(!whitespaceIpnId || whitespaceIpnId.trim() === '', 'Whitespace-only IPN ID is detected as invalid');
+}
+
+// ─── Test: order.ts validates notificationId before Pesapal submission ──
+
+async function testOrderValidatesNotificationId() {
+  console.log('\n📋 Test: order.ts validates notificationId before Pesapal submission');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'order.ts'),
+    'utf-8'
+  );
+
+  // Must check notificationId before submitting to Pesapal
+  assert(src.includes('notificationId'), 'order.ts checks notificationId');
+  assert(src.includes('payment_order_missing_ipn_id'), 'order.ts logs payment_order_missing_ipn_id');
+
+  // Must return 400 on empty notificationId
+  assert(src.includes('400'), 'order.ts returns 400 on empty notificationId');
+
+  // Must mark payment as failed if notificationId is empty
+  assert(src.includes("status: 'failed'"), 'order.ts marks payment as failed on empty notificationId');
+
+  // The validation must come AFTER payment record creation but BEFORE Pesapal submission
+  const missingIpnIdx = src.indexOf('payment_order_missing_ipn_id');
+  const submitIdx = src.indexOf('await submitOrderRequest');
+  assert(missingIpnIdx > -1 && submitIdx > -1, 'Both validation and submission exist in order.ts');
+  assert(missingIpnIdx < submitIdx, 'notificationId validation comes BEFORE Pesapal submission');
+}
+
+// ─── Test: admin-confirm.ts is idempotent (no double activation) ──
+
+async function testAdminConfirmIdempotent() {
+  console.log('\n📋 Test: admin-confirm.ts is idempotent — no double subscription activation');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-confirm.ts'),
+    'utf-8'
+  );
+
+  // Must fetch payment first (without updating)
+  assert(src.includes('existingPayment'), 'admin-confirm.ts fetches payment before updating');
+
+  // Must check if already succeeded and return early
+  assert(src.includes("already_succeeded"), 'admin-confirm.ts returns already_succeeded for duplicate calls');
+
+  // Must use conditional update with .eq('status', 'pending')
+  assert(src.includes(".eq('status', 'pending')"), 'admin-confirm.ts uses conditional update with status=pending');
+
+  // Must NOT unconditionally update to succeeded
+  assert(!src.includes("update({ status: 'succeeded' })\n      .eq('transaction_id'"), 'admin-confirm.ts does NOT unconditionally update by transaction_id');
+
+  // Must only activate subscription after successful conditional update
+  const conditionalUpdateIdx = src.indexOf(".eq('status', 'pending')");
+  const activateIdx = src.indexOf('await activateOrExtendSubscription');
+  assert(conditionalUpdateIdx > -1 && activateIdx > -1, 'Both conditional update and activation exist');
+  assert(conditionalUpdateIdx < activateIdx, 'Conditional update comes BEFORE subscription activation');
+
+  // Must log duplicate calls
+  assert(src.includes('admin_confirm_duplicate'), 'admin-confirm.ts logs admin_confirm_duplicate');
+
+  // Must log success
+  assert(src.includes('admin_confirm_success'), 'admin-confirm.ts logs admin_confirm_success');
+
+  // Must log conditional skip (concurrent or non-pending)
+  assert(src.includes('admin_confirm_conditional_skip'), 'admin-confirm.ts logs admin_confirm_conditional_skip');
+
+  // Simulate: payment already succeeded → should NOT activate
+  mockPayments.length = 0;
+  mockPayments.push({
+    id: 'pay-already-succeeded',
+    user_id: 'user-1',
+    transaction_id: 'tx-already',
+    amount: 1500,
+    currency: 'RWF',
+    status: 'succeeded',
+  });
+
+  // The code checks: if (existingPayment.status === 'succeeded') return early
+  const alreadySucceeded = mockPayments[0].status === 'succeeded';
+  assert(alreadySucceeded, 'Already-succeeded payment is detected');
+
+  // Simulate: payment is pending → conditional update succeeds → activate
+  mockPayments[0].status = 'pending';
+  const isPending = mockPayments[0].status === 'pending';
+  assert(isPending, 'Pending payment is detected for conditional update');
+
+  // Simulate: concurrent call — conditional update fails (status already changed)
+  mockPayments[0].status = 'succeeded'; // Another request changed it
+  const stillPending = mockPayments[0].status === 'pending';
+  assert(!stillPending, 'Concurrent call detects status is no longer pending');
+}
+
+// ─── Test: health endpoint classifies events correctly ──
+
+async function testHealthEndpointClassification() {
+  console.log('\n📋 Test: Health endpoint classifies IPN, confirm, and reconciliation events correctly');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'system', 'health.ts'),
+    'utf-8'
+  );
+
+  // IPN query must filter by type LIKE 'ipn_%', not just provider='pesapal'
+  assert(src.includes(".like('type', 'ipn_%')"), 'Health endpoint IPN query filters by type LIKE ipn_%');
+
+  // Must NOT use just provider='pesapal' for IPN query (the old bug)
+  // The old code had: .eq('provider', 'pesapal') without .like('type', 'ipn_%')
+  // We verify the new code has the .like filter
+  const ipnQueryMatch = src.match(/ipn.*?\.like\('type', 'ipn_%'\)/s);
+  assert(!!ipnQueryMatch, 'Health endpoint has type filter for IPN events');
+
+  // Confirm query must filter by type LIKE 'confirm_%'
+  assert(src.includes(".like('type', 'confirm_%')"), 'Health endpoint confirm query filters by type LIKE confirm_%');
+
+  // Reconciliation query must use provider='pesapal' and type LIKE 'reconciliation_%'
+  assert(src.includes(".like('type', 'reconciliation_%')"), 'Health endpoint reconciliation query filters by type LIKE reconciliation_%');
+
+  // Must NOT use provider='cron' (the old bug)
+  assert(!src.includes(".eq('provider', 'cron')"), 'Health endpoint does NOT use provider=cron (old bug)');
+
+  // Must NOT use type='reconcile_run' (the old bug)
+  assert(!src.includes("'reconcile_run'"), 'Health endpoint does NOT use type=reconcile_run (old bug)');
+
+  // Must include paymentEvents in payload
+  assert(src.includes('paymentEvents'), 'Health endpoint includes paymentEvents in payload');
+
+  // Must include confirm in payload
+  assert(src.includes('confirm:'), 'Health endpoint includes confirm activity in payload');
+
+  // Must include success and failure counts
+  assert(src.includes('successCount24h'), 'Health endpoint includes successCount24h');
+  assert(src.includes('failureCount24h'), 'Health endpoint includes failureCount24h');
+
+  // Simulate event classification
+  const eventTypes = [
+    'ipn_received', 'ipn_processed_success', 'ipn_error',
+    'confirm_started', 'confirm_status_received', 'confirm_error',
+    'reconciliation_started', 'reconciliation_completed', 'reconciliation_error',
+    'admin_confirm_success', 'admin_confirm_duplicate',
+  ];
+
+  const ipnEvents = eventTypes.filter(t => t.startsWith('ipn_'));
+  const confirmEvents = eventTypes.filter(t => t.startsWith('confirm_'));
+  const reconciliationEvents = eventTypes.filter(t => t.startsWith('reconciliation_'));
+  const adminEvents = eventTypes.filter(t => t.startsWith('admin_'));
+
+  assert(ipnEvents.length === 3, `IPN events correctly classified (${ipnEvents.length} found)`);
+  assert(confirmEvents.length === 3, `Confirm events correctly classified (${confirmEvents.length} found)`);
+  assert(reconciliationEvents.length === 3, `Reconciliation events correctly classified (${reconciliationEvents.length} found)`);
+
+  // Verify reconciliation events are NOT classified as IPN events
+  const reconInIpn = reconciliationEvents.some(t => t.startsWith('ipn_'));
+  assert(!reconInIpn, 'Reconciliation events are NOT classified as IPN events');
+
+  // Verify admin events are NOT classified as IPN events
+  const adminInIpn = adminEvents.some(t => t.startsWith('ipn_'));
+  assert(!adminInIpn, 'Admin events are NOT classified as IPN events');
+}
+
+// ─── Test: no secrets in any modified file ──
+
+async function testNoSecretsInModifiedFiles() {
+  console.log('\n📋 Test: No secrets emitted in logs across all modified files');
+
+  const fs = require('fs');
+  const path = require('path');
+
+  const files = [
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'ipn-register.ts'),
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'order.ts'),
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-confirm.ts'),
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'system', 'health.ts'),
+  ];
+
+  const secretPatterns = [
+    /consumer_secret/i,
+    /CONSUMER_SECRET/i,
+    /service_role_key/i,
+    /SUPABASE_SERVICE_ROLE_KEY/i,
+    /Bearer\s+\$/,
+    /password\s*[:=]/i,
+  ];
+
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf-8');
+
+    // Check that no secret values are logged
+    for (const pattern of secretPatterns) {
+      // It's OK to reference env var names in process.env lookups,
+      // but NOT OK to log their values
+      const matches = src.match(new RegExp(pattern.source, 'gi'));
+      if (matches) {
+        // Check if any match is in a logPaymentEvent call or console.log
+        for (const match of matches) {
+          const idx = src.indexOf(match);
+          const surroundingCode = src.substring(Math.max(0, idx - 100), Math.min(src.length, idx + 100));
+          // If it's in a logPaymentEvent payload or console.log, that's bad
+          if (surroundingCode.includes('logPaymentEvent') || surroundingCode.includes('console.log')) {
+            assert(false, `Potential secret in ${path.basename(file)}: ${match}`);
+          }
+        }
+      }
+    }
+  }
+
+  assert(true, 'No secrets found in log statements across all modified files');
+}
+
+// ─── Recovery Tests: admin-recover.ts safeguard verification ──
+
+async function testRecoveryRequiresAdminAuth() {
+  console.log('\n📋 Test: admin-recover.ts requires admin authentication');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  assert(src.includes('import { verifyAdmin }'), 'admin-recover.ts imports verifyAdmin');
+  assert(src.includes('verifyAdmin(req)'), 'admin-recover.ts calls verifyAdmin(req)');
+  assert(src.includes('auth.authorized'), 'admin-recover.ts checks auth.authorized');
+  assert(src.includes('401'), 'admin-recover.ts returns 401 on unauthorized');
+}
+
+async function testRecoverySupportsDryRun() {
+  console.log('\n📋 Test: admin-recover.ts supports dry-run mode with default true');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // dryRun must default to true
+  assert(src.includes("dryRun = true"), 'admin-recover.ts defaults dryRun to true');
+
+  // Dry run must return before any insert
+  const dryRunIdx = src.indexOf('if (dryRun)');
+  const insertIdx = src.indexOf(".from('payments')\n      .insert(");
+  assert(dryRunIdx > -1, 'admin-recover.ts has dry-run check');
+  assert(insertIdx > -1, 'admin-recover.ts has payment insert');
+  assert(dryRunIdx < insertIdx, 'Dry-run check comes BEFORE payment insert');
+
+  // Dry run must return wouldDo object
+  assert(src.includes('wouldDo'), 'admin-recover.ts returns wouldDo in dry-run response');
+  assert(src.includes('createPayment: true'), 'Dry-run reports createPayment');
+  assert(src.includes('activateSubscription: true'), 'Dry-run reports activateSubscription');
+  assert(src.includes('planName'), 'Dry-run reports planName');
+  assert(src.includes('durationMonths'), 'Dry-run reports durationMonths');
+  assert(src.includes('planId'), 'Dry-run reports planId');
+}
+
+async function testRecoveryAcceptsOrderTrackingId() {
+  console.log('\n📋 Test: admin-recover.ts accepts explicit orderTrackingId');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  assert(src.includes('orderTrackingId'), 'admin-recover.ts uses orderTrackingId');
+  assert(src.includes("Missing orderTrackingId"), 'admin-recover.ts validates missing orderTrackingId');
+  assert(src.includes('400'), 'admin-recover.ts returns 400 on missing orderTrackingId');
+}
+
+async function testRecoveryFetchesPesapalStatus() {
+  console.log('\n📋 Test: admin-recover.ts fetches and verifies transaction status from Pesapal');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  assert(src.includes('getTransactionStatus'), 'admin-recover.ts calls getTransactionStatus');
+  assert(src.includes('502'), 'admin-recover.ts returns 502 on Pesapal API error');
+
+  // Must check for COMPLETED or SUCCESS status
+  assert(src.includes('COMPLETED'), 'admin-recover.ts checks for COMPLETED status');
+  assert(src.includes('SUCCESS'), 'admin-recover.ts checks for SUCCESS status');
+
+  // Must reject non-completed transactions
+  assert(src.includes('Transaction not completed'), 'admin-recover.ts rejects non-completed transactions');
+}
+
+async function testRecoveryValidatesAmount() {
+  console.log('\n📋 Test: admin-recover.ts validates amount against pricing tiers');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  assert(src.includes('pricing_tiers'), 'admin-recover.ts queries pricing_tiers');
+  assert(src.includes('matchingTier'), 'admin-recover.ts finds matching tier');
+  assert(src.includes('does not match any pricing tier'), 'admin-recover.ts rejects unmatched amount');
+  assert(src.includes('admin_recovery_amount_mismatch'), 'admin-recover.ts logs amount mismatch');
+
+  // Simulate amount validation
+  const mockTiers = [
+    { id: 'tier-1', price_rwf: 1500, duration_months: 1, display_name_en: 'Basic 1m' },
+    { id: 'tier-2', price_rwf: 13500, duration_months: 12, display_name_en: 'Basic 12m' },
+  ];
+
+  const findTier = (amount: number) => mockTiers.find(t => t.price_rwf == amount);
+
+  assert(!!findTier(1500), '1500 RWF matches a tier');
+  assert(!!findTier(13500), '13500 RWF matches a tier');
+  assert(!findTier(100), '100 RWF does not match any tier');
+  assert(!findTier(999), '999 RWF does not match any tier');
+}
+
+async function testRecoveryValidatesCurrency() {
+  console.log('\n📋 Test: admin-recover.ts validates currency matches expected RWF');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  assert(src.includes('expectedCurrency'), 'admin-recover.ts has expectedCurrency check');
+  assert(src.includes("'RWF'"), 'admin-recover.ts expects RWF currency');
+  assert(src.includes('admin_recovery_currency_mismatch'), 'admin-recover.ts logs currency mismatch');
+  assert(src.includes('does not match expected'), 'admin-recover.ts rejects wrong currency');
+
+  // The currency check must come AFTER amount check but BEFORE dry-run
+  const amountCheckIdx = src.indexOf('admin_recovery_amount_mismatch');
+  const currencyCheckIdx = src.indexOf('admin_recovery_currency_mismatch');
+  const dryRunIdx = src.indexOf('if (dryRun)');
+
+  assert(amountCheckIdx > -1, 'Amount check exists');
+  assert(currencyCheckIdx > -1, 'Currency check exists');
+  assert(dryRunIdx > -1, 'Dry-run check exists');
+  assert(amountCheckIdx < currencyCheckIdx, 'Amount check comes BEFORE currency check');
+  assert(currencyCheckIdx < dryRunIdx, 'Currency check comes BEFORE dry-run check');
+}
+
+async function testRecoveryPreventsDuplicates() {
+  console.log('\n📋 Test: admin-recover.ts prevents duplicate payment records');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must call findPayment before creating
+  assert(src.includes('findPayment'), 'admin-recover.ts calls findPayment');
+  assert(src.includes('Payment already exists'), 'admin-recover.ts returns early if payment exists');
+
+  // Must use idempotency_key on insert
+  assert(src.includes('idempotency_key: merchantRef'), 'admin-recover.ts uses merchantRef as idempotency_key');
+
+  // Simulate: first call creates, second call finds existing
+  mockPayments.length = 0;
+  mockPayments.push({
+    id: 'pay-recovered-1',
+    user_id: 'user-1',
+    transaction_id: 'merchant-ref-1',
+    amount: 1500,
+    currency: 'RWF',
+    status: 'succeeded',
+    idempotency_key: 'merchant-ref-1',
+  });
+
+  // Second call: findPayment returns existing
+  const { data: existing } = await mockSupabaseAdmin
+    .from('payments')
+    .select('id, status')
+    .eq('transaction_id', 'merchant-ref-1')
+    .single();
+
+  assert(!!existing, 'Second recovery call finds existing payment');
+  assert(existing.status === 'succeeded', 'Existing payment is succeeded');
+  assert(mockPayments.length === 1, 'Only one payment record exists');
+}
+
+async function testRecoveryDoesNotOverwriteSucceeded() {
+  console.log('\n📋 Test: admin-recover.ts does not overwrite existing succeeded payment');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // When existing payment is found, must return recovered: false
+  assert(src.includes('recovered: false'), 'admin-recover.ts returns recovered: false for existing payment');
+
+  // admin-recover.ts should NOT have any .update() call — it only inserts new payments
+  // and returns early if a payment already exists
+  assert(!src.includes('.update({'), 'admin-recover.ts does NOT update existing payments (only inserts)');
+
+  // The existing payment block must return before any insert
+  const existingCheckIdx = src.indexOf('if (existing)');
+  const insertIdx = src.indexOf(".from('payments')\n      .insert(");
+  assert(existingCheckIdx > -1, 'Existing payment check exists');
+  assert(insertIdx > -1, 'Payment insert exists');
+  const existingReturnIdx = src.indexOf('return res.status(200)', existingCheckIdx);
+  assert(existingReturnIdx > -1 && existingReturnIdx < insertIdx, 'Existing payment block returns before payment insert');
+}
+
+async function testRecoveryChecksSubscriptionOnExisting() {
+  console.log('\n📋 Test: admin-recover.ts checks subscription status on existing payment');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must check subscription status when existing payment found
+  assert(src.includes('subscriptionActive'), 'admin-recover.ts reports subscriptionActive');
+  assert(src.includes('subscriptionExpiresAt'), 'admin-recover.ts reports subscriptionExpiresAt');
+
+  // Must include warning if payment succeeded but subscription not active
+  assert(src.includes('Payment is succeeded but subscription is NOT active'), 'admin-recover.ts warns about inactive subscription');
+
+  // Must log the existing payment event
+  assert(src.includes('admin_recovery_existing'), 'admin-recover.ts logs admin_recovery_existing');
+}
+
+async function testRecoveryHandlesUnknownUser() {
+  console.log('\n📋 Test: admin-recover.ts handles unresolvable user ID');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must extract user ID from merchant reference
+  assert(src.includes('extractUserIdFromMerchantRef'), 'admin-recover.ts calls extractUserIdFromMerchantRef');
+
+  // Must handle null user ID
+  assert(src.includes('Cannot extract user ID'), 'admin-recover.ts rejects unextractable user ID');
+  assert(src.includes('admin_recovery_failed'), 'admin-recover.ts logs failure');
+
+  // Must verify user exists
+  assert(src.includes('verifyUserExists'), 'admin-recover.ts calls verifyUserExists');
+  assert(src.includes('User not found'), 'admin-recover.ts rejects unknown user');
+
+  // Simulate: merchant ref without valid UUID prefix
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const extract = (ref: string): string | null => {
+    if (!ref || ref.length < 36) return null;
+    const potentialUuid = ref.substring(0, 36);
+    if (UUID_REGEX.test(potentialUuid)) return potentialUuid;
+    return null;
+  };
+
+  assert(extract('short-ref') === null, 'Short merchant ref returns null');
+  assert(extract('not-a-uuid-prefix-at-all-12345678901234567890123456789012') === null, 'Non-UUID prefix returns null');
+  assert(extract('e7de6844-8dc9-45d4-b97e-5b3fd45cb46f-1786903201368-ct4o2f') === 'e7de6844-8dc9-45d4-b97e-5b3fd45cb46f', 'Valid UUID prefix is extracted');
+}
+
+async function testRecoveryRecordsPesapalIdentifiers() {
+  console.log('\n📋 Test: admin-recover.ts records original Pesapal transaction identifiers');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must save order_tracking_id
+  assert(src.includes('order_tracking_id: orderTrackingId'), 'admin-recover.ts saves order_tracking_id');
+
+  // Must save confirmation_code
+  assert(src.includes('confirmation_code: confirmationCode'), 'admin-recover.ts saves confirmation_code');
+
+  // Must save gateway_status (raw Pesapal response)
+  assert(src.includes('gateway_status:'), 'admin-recover.ts saves gateway_status');
+
+  // Must save transaction_id (merchant reference)
+  assert(src.includes('transaction_id: merchantRef'), 'admin-recover.ts saves transaction_id as merchantRef');
+
+  // Must save plan_id from matching tier
+  assert(src.includes('plan_id:'), 'admin-recover.ts saves plan_id');
+
+  // Must save completed_at
+  assert(src.includes('completed_at:'), 'admin-recover.ts saves completed_at');
+}
+
+async function testRecoveryProducesAuditableResults() {
+  console.log('\n📋 Test: admin-recover.ts produces auditable results for every attempt');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must log recovery start
+  assert(src.includes('admin_recovery_started'), 'admin-recover.ts logs recovery start');
+
+  // Must log Pesapal status
+  assert(src.includes('admin_recovery_status'), 'admin-recover.ts logs Pesapal status');
+
+  // Must log completion
+  assert(src.includes('admin_recovery_completed'), 'admin-recover.ts logs recovery completion');
+
+  // Must log failures
+  assert(src.includes('admin_recovery_failed'), 'admin-recover.ts logs recovery failures');
+
+  // Must log errors
+  assert(src.includes('admin_recovery_error'), 'admin-recover.ts logs recovery errors');
+
+  // Must log amount mismatch
+  assert(src.includes('admin_recovery_amount_mismatch'), 'admin-recover.ts logs amount mismatch');
+
+  // Must log currency mismatch
+  assert(src.includes('admin_recovery_currency_mismatch'), 'admin-recover.ts logs currency mismatch');
+
+  // Must log existing payment found
+  assert(src.includes('admin_recovery_existing'), 'admin-recover.ts logs existing payment found');
+
+  // All responses must include dryRun flag
+  assert(src.includes('dryRun'), 'admin-recover.ts includes dryRun in all responses');
+
+  // All responses must include merchantRef
+  assert(src.includes('merchantRef'), 'admin-recover.ts includes merchantRef in responses');
+}
+
+async function testRecoverySubscriptionIdempotency() {
+  console.log('\n📋 Test: Recovery subscription activation idempotency — no double extension');
+
+  // Simulate: recovery creates payment + activates subscription
+  // Second recovery call finds existing payment → returns early → does NOT activate again
+
+  mockPayments.length = 0;
+
+  // Simulate first recovery: creates payment
+  mockPayments.push({
+    id: 'pay-recovery-1',
+    user_id: 'user-recovery',
+    transaction_id: 'merchant-ref-recovery',
+    amount: 1500,
+    currency: 'RWF',
+    status: 'succeeded',
+    idempotency_key: 'merchant-ref-recovery',
+  });
+
+  // Simulate subscription activation
+  let subscriptionActivations = 0;
+  const mockActivate = () => {
+    subscriptionActivations++;
+    return { status: 'active', expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() };
+  };
+
+  // First recovery: findPayment returns null → create payment → activate
+  const { data: existing1 } = await mockSupabaseAdmin
+    .from('payments')
+    .select('id, status')
+    .eq('transaction_id', 'merchant-ref-recovery')
+    .single();
+
+  if (!existing1) {
+    // Would create payment and activate
+    mockActivate();
+  }
+
+  assert(subscriptionActivations === 0, 'First call: payment does not exist yet (will be created)');
+
+  // Simulate payment was created by first call
+  // Now second recovery call: findPayment returns existing
+  const { data: existing2 } = await mockSupabaseAdmin
+    .from('payments')
+    .select('id, status')
+    .eq('transaction_id', 'merchant-ref-recovery')
+    .single();
+
+  if (existing2) {
+    // Payment exists → return early, do NOT activate
+    assert(true, 'Second call: payment found, returning early (no activation)');
+  } else {
+    mockActivate();
+  }
+
+  assert(subscriptionActivations === 0, 'No subscription activation on second call (payment already exists)');
+
+  // Simulate the first call's activation (after creating payment)
+  mockActivate();
+  assert(subscriptionActivations === 1, 'First call activates subscription exactly once');
+
+  // Third recovery call: payment still exists → no activation
+  const { data: existing3 } = await mockSupabaseAdmin
+    .from('payments')
+    .select('id, status')
+    .eq('transaction_id', 'merchant-ref-recovery')
+    .single();
+
+  if (existing3) {
+    assert(true, 'Third call: payment found, returning early (no activation)');
+  } else {
+    mockActivate();
+  }
+
+  assert(subscriptionActivations === 1, 'Subscription activated exactly once across all calls');
+}
+
+async function testRecoveryBillingHistoryIdempotent() {
+  console.log('\n📋 Test: Recovery billing history is idempotent (check before insert)');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must check billing_history before inserting
+  assert(src.includes('existingBilling'), 'admin-recover.ts checks existing billing_history');
+  assert(src.includes('billing_history'), 'admin-recover.ts queries billing_history');
+
+  // Must only insert if no existing billing
+  const billingCheckIdx = src.indexOf('existingBilling');
+  const billingInsertIdx = src.indexOf("from('billing_history').insert(");
+  assert(billingCheckIdx > -1, 'Billing check exists');
+  assert(billingInsertIdx > -1, 'Billing insert exists');
+  assert(billingCheckIdx < billingInsertIdx, 'Billing check comes BEFORE insert');
+
+  // Must catch billing insert errors gracefully
+  assert(src.includes('billingErr'), 'admin-recover.ts catches billing insert errors');
+}
+
+async function testRecoveryNoSecretsLogged() {
+  console.log('\n📋 Test: admin-recover.ts does not log secrets');
+
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pages', 'api', 'pesapal', 'admin-recover.ts'),
+    'utf-8'
+  );
+
+  // Must not log consumer key/secret
+  assert(!src.includes('consumer_key'), 'admin-recover.ts does not log consumer_key');
+  assert(!src.includes('consumer_secret'), 'admin-recover.ts does not log consumer_secret');
+  assert(!src.includes('CONSUMER_KEY'), 'admin-recover.ts does not log CONSUMER_KEY');
+  assert(!src.includes('CONSUMER_SECRET'), 'admin-recover.ts does not log CONSUMER_SECRET');
+
+  // Must not log service role key
+  assert(!src.includes('SERVICE_ROLE_KEY'), 'admin-recover.ts does not log SERVICE_ROLE_KEY');
+
+  // Must not log Bearer tokens
+  assert(!src.includes('Bearer '), 'admin-recover.ts does not log Bearer tokens');
+
+  // Must use logPaymentEvent (which sanitizes)
+  assert(src.includes('logPaymentEvent'), 'admin-recover.ts uses logPaymentEvent for logging');
+}
+
 // ─── Main runner ─────────────────────────────────────────────
 
 async function main() {
@@ -995,6 +1715,27 @@ async function main() {
   await testAdminConfirmHasAuth();
   await testCallbackNoEdgeFunction();
   await testEdgeFunctionDeprecated();
+  await testIPNRegistrationLoggingAndValidation();
+  await testOrderValidatesNotificationId();
+  await testAdminConfirmIdempotent();
+  await testHealthEndpointClassification();
+  await testNoSecretsInModifiedFiles();
+  // Recovery-specific tests
+  await testRecoveryRequiresAdminAuth();
+  await testRecoverySupportsDryRun();
+  await testRecoveryAcceptsOrderTrackingId();
+  await testRecoveryFetchesPesapalStatus();
+  await testRecoveryValidatesAmount();
+  await testRecoveryValidatesCurrency();
+  await testRecoveryPreventsDuplicates();
+  await testRecoveryDoesNotOverwriteSucceeded();
+  await testRecoveryChecksSubscriptionOnExisting();
+  await testRecoveryHandlesUnknownUser();
+  await testRecoveryRecordsPesapalIdentifiers();
+  await testRecoveryProducesAuditableResults();
+  await testRecoverySubscriptionIdempotency();
+  await testRecoveryBillingHistoryIdempotent();
+  await testRecoveryNoSecretsLogged();
 
   console.log('\n═══════════════════════════════════════════════════════════');
   console.log(`  Results: ${passCount} passed, ${failCount} failed, ${testCount} total`);

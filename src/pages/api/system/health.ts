@@ -55,7 +55,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     } catch {}
   }
 
-  // Last IPN received timestamp
+  // Last IPN received timestamp — only actual IPN events (type starts with 'ipn_')
   let lastIpnAt: string | null = null;
   if (supabaseAdmin) {
     try {
@@ -63,24 +63,57 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
         .from('webhook_events')
         .select('created_at')
         .eq('provider', 'pesapal')
+        .like('type', 'ipn_%')
         .order('created_at', { ascending: false })
         .limit(1);
       lastIpnAt = data && data.length ? isoOrNull((data[0] as any).created_at) : null;
     } catch {}
   }
 
-  // Last reconciliation run timestamp
+  // Last confirm activity timestamp — only confirm events (type starts with 'confirm_')
+  let lastConfirmAt: string | null = null;
+  if (supabaseAdmin) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('webhook_events')
+        .select('created_at')
+        .eq('provider', 'pesapal')
+        .like('type', 'confirm_%')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      lastConfirmAt = data && data.length ? isoOrNull((data[0] as any).created_at) : null;
+    } catch {}
+  }
+
+  // Last reconciliation run timestamp — only reconciliation events (type starts with 'reconciliation_')
   let lastReconAt: string | null = null;
   if (supabaseAdmin) {
     try {
       const { data } = await supabaseAdmin
         .from('webhook_events')
         .select('created_at')
-        .eq('provider', 'cron')
-        .eq('type', 'reconcile_run')
+        .eq('provider', 'pesapal')
+        .like('type', 'reconciliation_%')
         .order('created_at', { ascending: false })
         .limit(1);
       lastReconAt = data && data.length ? isoOrNull((data[0] as any).created_at) : null;
+    } catch {}
+  }
+
+  // Payment processing success/failure counts (last 24h)
+  let paymentSuccessCount = 0;
+  let paymentFailureCount = 0;
+  if (supabaseAdmin) {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const successTypes = ['ipn_processed_success', 'confirm_success', 'reconcile_success'];
+      const failureTypes = ['ipn_error', 'ipn_recovery_failed', 'confirm_error', 'reconciliation_error', 'admin_confirm_conditional_skip'];
+      const [{ count: sc }, { count: fc }] = await Promise.all([
+        supabaseAdmin.from('webhook_events').select('id', { count: 'exact', head: true }).eq('provider', 'pesapal').in('type', successTypes).gte('created_at', since),
+        supabaseAdmin.from('webhook_events').select('id', { count: 'exact', head: true }).eq('provider', 'pesapal').in('type', failureTypes).gte('created_at', since),
+      ]);
+      paymentSuccessCount = sc || 0;
+      paymentFailureCount = fc || 0;
     } catch {}
   }
 
@@ -137,7 +170,9 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     db: { ok: dbOk, mode: dbMode },
     payments: { lastProcessedAt: lastPaymentAt },
     ipn: { lastReceivedAt: lastIpnAt },
+    confirm: { lastActivityAt: lastConfirmAt },
     reconciliation: { lastRunAt: lastReconAt },
+    paymentEvents: { successCount24h: paymentSuccessCount, failureCount24h: paymentFailureCount },
     analytics: { status: analyticsStatus, lastEventAt: lastAnalyticsAt },
     subscriptions: { status: subscriptionStatus },
   } as const;

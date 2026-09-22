@@ -59,6 +59,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const existing = await findPayment(merchantRef, orderTrackingId);
 
     if (existing) {
+      // Check subscription status to detect incomplete recovery
+      let subscriptionActive = false;
+      let subscriptionExpiresAt: string | null = null;
+      if (existing.user_id) {
+        try {
+          const { data: sub } = await supabaseAdmin
+            .from('user_subscriptions')
+            .select('status, expires_at')
+            .eq('user_id', existing.user_id)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          if (sub && sub.length > 0) {
+            subscriptionActive = sub[0].status === 'active' &&
+              (!sub[0].expires_at || new Date(sub[0].expires_at) > new Date());
+            subscriptionExpiresAt = sub[0].expires_at || null;
+          }
+        } catch {}
+      }
+
+      await logPaymentEvent('admin_recovery_existing', {
+        paymentId: existing.id,
+        status: existing.status,
+        subscriptionActive,
+        merchantRef,
+      });
+
       return res.status(200).json({
         ok: true,
         dryRun,
@@ -66,6 +92,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         reason: 'Payment already exists in Nova',
         paymentId: existing.id,
         status: existing.status,
+        subscriptionActive,
+        subscriptionExpiresAt,
+        warning: !subscriptionActive && existing.status === 'succeeded'
+          ? 'Payment is succeeded but subscription is NOT active. Subscription activation may have failed during original recovery.'
+          : undefined,
         merchantRef,
         amount,
         currency,
@@ -125,6 +156,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // 5b. Validate currency — must match expected currency for pricing tiers
+    const expectedCurrency = 'RWF';
+    if (currency !== expectedCurrency) {
+      await logPaymentEvent('admin_recovery_currency_mismatch', { amount, currency, expectedCurrency, merchantRef });
+      return res.status(200).json({
+        ok: false,
+        dryRun,
+        reason: `Currency ${currency} does not match expected ${expectedCurrency}. Manual review required.`,
+        userId,
+        merchantRef,
+        amount,
+        currency,
+        confirmationCode,
+      });
+    }
+
     // 6. Dry run — report what would happen
     if (dryRun) {
       return res.status(200).json({
@@ -134,6 +181,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         wouldDo: {
           createPayment: true,
           activateSubscription: true,
+          planId: (matchingTier as any).id,
           planName: (matchingTier as any).display_name_en,
           durationMonths: (matchingTier as any).duration_months,
           amount,
@@ -160,6 +208,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         order_tracking_id: orderTrackingId,
         confirmation_code: confirmationCode,
         idempotency_key: merchantRef,
+        plan_id: (matchingTier as any).id,
         completed_at: new Date().toISOString(),
       })
       .select('id, user_id, amount, currency, status, transaction_id')
