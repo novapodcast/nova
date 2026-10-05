@@ -28,6 +28,7 @@ export default function PricingPage() {
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasActiveSub, setHasActiveSub] = useState(false);
   const searchParams = useSearchParams();
   const recommend = (searchParams?.get('recommend') || '').toLowerCase();
 
@@ -36,6 +37,17 @@ export default function PricingPage() {
     const checkAuth = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       setIsAuthenticated(!!sessionData.session);
+      if (sessionData.session?.access_token) {
+        try {
+          const res = await fetch('/api/subscription-status', {
+            headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+          });
+          if (res.ok) {
+            const state = await res.json();
+            setHasActiveSub(!!state?.isActive);
+          }
+        } catch {}
+      }
     };
     checkAuth();
 
@@ -134,6 +146,16 @@ export default function PricingPage() {
         <h1 className="text-3xl md:text-4xl font-bold mb-4">{t('pricing.title', language)}</h1>
         <p className="text-muted max-w-2xl mx-auto">{t('pricing.subtitle', language)}</p>
       </div>
+
+      {hasActiveSub && (
+        <div className="max-w-2xl mx-auto mb-8 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm text-center">
+          <span className="text-white/90">
+            {language === 'rw'
+              ? 'Ufite gahunda ikora — igihe gisigaye ntikibura. Igihe gishya cyongerwa ku gihe cyawe cyo guhera.'
+              : 'You have an active plan — your remaining time is preserved. The new period is added on top of your current expiry date.'}
+          </span>
+        </div>
+      )}
 
       {/* Billing Toggle: Monthly vs Annual (12m) */}
       <div className="flex items-center justify-center gap-3 mb-12">

@@ -2,10 +2,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { fetchAllPublicPodcasts } from '@/lib/data/podcasts';
+import { fetchAllPublicPodcasts, PODCAST_CARD_COLUMNS } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useSearchParams } from 'next/navigation';
 import PlayOverlay from '@/components/PlayOverlay';
+import ContentTierBadge from '@/components/ContentTierBadge';
+import { fetchUserTierRank } from '@/lib/entitlements';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Podcast {
   id: string;
@@ -17,6 +20,7 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
+  access_tier?: { rank: number } | null;
 }
 
 export default function PodcastsPage() {
@@ -26,11 +30,13 @@ export default function PodcastsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<{ id: string; name_en: string; name_rw: string }[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [userTierRank, setUserTierRank] = useState(0);
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    fetchUserTierRank().then(setUserTierRank).catch(() => {});
     const load = async () => {
-      const { data, error } = await fetchAllPublicPodcasts();
+      const { data, error } = await fetchAllPublicPodcasts(supabase, PODCAST_CARD_COLUMNS);
       if (!error && data) {
         setPodcasts(data as unknown as Podcast[]);
       }
@@ -70,13 +76,6 @@ export default function PodcastsPage() {
     }
     return rows;
   }, [podcasts, selectedCategoryId, searchQuery]);
-
-  const formatCount = (value: number | null | undefined) => {
-    if (!value) return '0';
-    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-    return new Intl.NumberFormat(language === 'rw' ? 'en-GB' : 'en-US').format(value);
-  };
 
   const formatEpisodeCount = (count: number | null | undefined) => {
     const n = count ?? 0;
@@ -217,30 +216,25 @@ export default function PodcastsPage() {
 
                 {/* Metadata below artwork */}
                 <div className="mt-3 space-y-1">
-                  <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">
-                    {title}
-                  </h3>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors min-w-0">
+                      {title}
+                    </h3>
+                    <span className="text-xs font-bold text-white whitespace-nowrap flex-shrink-0">
+                      {formatEpisodeCount(podcast.total_episodes)}
+                    </span>
+                  </div>
                   {podcast.speaker_name && (
                     <p className="text-sm text-muted line-clamp-1">
                       {podcast.speaker_name}
                     </p>
                   )}
                   <div className="flex items-center gap-3 text-xs text-muted pt-1">
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                      {formatEpisodeCount(podcast.total_episodes)}
-                    </span>
-                    {(podcast.total_listeners ?? 0) > 0 && (
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        {formatCount(podcast.total_listeners)}
-                      </span>
-                    )}
+                    <ContentTierBadge
+                      contentTierRank={podcast.access_tier?.rank ?? 0}
+                      userTierRank={userTierRank}
+                      language={language}
+                    />
                   </div>
                 </div>
               </Link>

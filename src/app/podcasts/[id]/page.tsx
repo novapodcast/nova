@@ -3,12 +3,14 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { fetchPublicPodcastByIdOrSlug } from '@/lib/data/podcasts';
+import { fetchPublicPodcastByIdOrSlug, PODCAST_CARD_COLUMNS } from '@/lib/data/podcasts';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { t } from '@/lib/i18n';
 import FollowButton from '@/components/FollowButton';
 import ShareButton from '@/components/ShareButton';
 import FavoriteButton from '@/components/FavoriteButton';
+import ContentTierBadge from '@/components/ContentTierBadge';
+import { fetchUserTierRank, fetchEpisodesTierRanks } from '@/lib/entitlements';
 import { useResumePlayback } from '@/lib/useResumePlayback';
 
 interface Podcast {
@@ -22,6 +24,7 @@ interface Podcast {
   total_episodes: number | null;
   total_listeners: number | null;
   updated_at: string | null;
+  access_tier?: { rank: number } | null;
 }
 
 interface Episode {
@@ -42,6 +45,8 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
   const { language } = useLanguage();
   const [podcast, setPodcast] = useState<Podcast | null>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [episodeTierRanks, setEpisodeTierRanks] = useState<Record<string, number>>({});
+  const [userTierRank, setUserTierRank] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   
@@ -55,7 +60,7 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
 
   useEffect(() => {
     const load = async () => {
-      const { data: pod, error: podError } = await fetchPublicPodcastByIdOrSlug(params.id);
+      const { data: pod, error: podError } = await fetchPublicPodcastByIdOrSlug(params.id, supabase, PODCAST_CARD_COLUMNS);
 
       if (podError || !pod) {
         setError(true);
@@ -63,6 +68,8 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
         return;
       }
       setPodcast(pod as unknown as Podcast);
+
+      fetchUserTierRank().then(setUserTierRank).catch(() => {});
 
       // Fetch episodes in chronological order (oldest first)
       const { data: eps } = await supabase
@@ -72,7 +79,10 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
         .eq('status', 'published')
         .order('published_at', { ascending: true });
 
-      if (eps) setEpisodes(eps as Episode[]);
+      if (eps) {
+        setEpisodes(eps as Episode[]);
+        fetchEpisodesTierRanks(eps.map((e) => e.id)).then(setEpisodeTierRanks).catch(() => {});
+      }
       setLoading(false);
     };
     load();
@@ -301,6 +311,11 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
 
             {/* Podcast statistics */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm mb-5">
+              <ContentTierBadge
+                contentTierRank={podcast.access_tier?.rank ?? 0}
+                userTierRank={userTierRank}
+                language={language}
+              />
               <div className="flex items-center gap-2">
                 <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -412,6 +427,11 @@ export default function PodcastDetailPage({ params }: { params: { id: string } }
                         <span className="text-xs font-medium text-primary">
                           {t('podcasts.episodeNumber', language, { num: episodeNum })}
                         </span>
+                        <ContentTierBadge
+                          contentTierRank={episodeTierRanks[ep.id] ?? 0}
+                          userTierRank={userTierRank}
+                          language={language}
+                        />
                         {ep.published_at && (
                           <>
                             <span className="text-muted">•</span>

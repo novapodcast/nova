@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { uploadAvatar } from '@/lib/upload';
 import { useLanguage } from '../contexts/LanguageContext';
 import { t } from '../lib/i18n';
+import { useSubscriptionCountdown } from '../lib/useSubscriptionCountdown';
 
 interface UserProfile {
   email: string;
@@ -24,8 +25,10 @@ interface Payment {
 
 interface Subscription {
   status: string;
+  effectiveStatus?: 'active' | 'expiring_soon' | 'expired' | 'cancelled' | 'past_due';
   expires_at: string | null;
   plan_name?: string;
+  daysRemaining?: number | null;
 }
 
 type Tab = 'profile' | 'billing' | 'invoices' | 'consents';
@@ -55,6 +58,13 @@ export default function AccountSettings() {
   const [consents, setConsents] = useState<any[]>([]);
   const [consentSaving, setConsentSaving] = useState(false);
   const [accessToken, setAccessToken] = useState<string>('');
+
+  const subIsActive = subscription
+    ? (subscription.effectiveStatus
+        ? subscription.effectiveStatus === 'active' || subscription.effectiveStatus === 'expiring_soon'
+        : subscription.status === 'active' && (!subscription.expires_at || new Date(subscription.expires_at) > new Date()))
+    : false;
+  const countdown = useSubscriptionCountdown(subIsActive ? subscription?.expires_at : null);
 
   // Sync active tab with URL query param
   useEffect(() => {
@@ -101,13 +111,59 @@ export default function AccountSettings() {
         setAvatarUrl(profileData.avatar_url || '');
       }
 
+      // Canonical subscription state (same endpoint as dashboard + mobile)
+      let canonicalSub: any = null;
+      try {
+        const subRes = await fetch('/api/subscription-status', {
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        });
+        if (subRes.ok) canonicalSub = await subRes.json();
+      } catch {}
+
       const { data: sub } = await supabase
         .from('user_subscriptions')
         .select('status, expires_at, plan_id')
         .eq('user_id', uid)
         .single();
 
-      if (sub) {
+      if (canonicalSub && canonicalSub.status !== 'none') {
+        let planName: string | undefined = canonicalSub.planName || undefined;
+
+        if (!planName) {
+          const { data: latestPayment } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('user_id', uid)
+            .eq('status', 'succeeded')
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          const latestAmount = latestPayment && latestPayment.length > 0 ? latestPayment[0].amount : null;
+          if (latestAmount != null) {
+            const { data: inferredTier } = await supabase
+              .from('pricing_tiers')
+              .select('display_name_en, plan_name')
+              .eq('price_rwf', latestAmount)
+              .limit(1);
+            const inferred = inferredTier && inferredTier.length > 0 ? inferredTier[0] : null;
+            if (inferred) {
+              planName = inferred.display_name_en || inferred.plan_name;
+            }
+          }
+        }
+
+        if (!planName && canonicalSub.status === 'active') {
+          planName = 'Active subscription';
+        }
+
+        setSubscription({
+          status: canonicalSub.status,
+          effectiveStatus: canonicalSub.effectiveStatus,
+          expires_at: canonicalSub.expiresAt || null,
+          plan_name: planName,
+          daysRemaining: canonicalSub.daysRemaining ?? null,
+        });
+      } else if (sub) {
         const subRow = sub as any;
         let planName: string | undefined;
         if (subRow.plan_id) {
@@ -482,12 +538,27 @@ export default function AccountSettings() {
                 <div className="text-2xl font-bold text-white mb-2">
                   {subscription.plan_name || (subscription.status === 'active' ? t('profile.active', language) : t('profile.inactive', language))}
                 </div>
-                <div className="text-sm text-muted mb-6">
-                  {t('profile.status', language)}: <span className={subscription.status === 'active' ? 'text-green-400' : 'text-yellow-400'}>{t(`dashboard.status${subscription.status.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('')}`, language)}</span>
+                <div className="text-sm text-muted mb-4">
+                  {t('profile.status', language)}: <span className={subIsActive ? 'text-green-400' : 'text-yellow-400'}>{subscription.effectiveStatus
+                    ? (language === 'rw'
+                        ? ({ active: 'Gikora', expiring_soon: 'Izera vuba', expired: 'Yarangiye', cancelled: 'Byakuweho', past_due: 'Ishyuru ntibyagenze' } as Record<string, string>)[subscription.effectiveStatus]
+                        : subscription.effectiveStatus.replace(/_/g, ' ').replace(/^\w|\s\w/g, (c) => c.toUpperCase()))
+                    : t(`dashboard.status${subscription.status.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('')}`, language)}</span>
                 </div>
+                {subIsActive && countdown && (
+                  <div className="mb-4">
+                    <div className="text-sm text-white font-medium">
+                      {countdown} {subscription.daysRemaining != null && (
+                        <span className="text-muted">· {language === 'rw' ? `iminsi ${subscription.daysRemaining} isigaye` : `${subscription.daysRemaining} days remaining`}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {subscription.expires_at && (
                   <div className="text-sm text-muted mb-6">
-                    {t('profile.renews', language)}: {new Date(subscription.expires_at).toLocaleDateString()}
+                    {subIsActive
+                      ? `${t('profile.renews', language)}: ${new Date(subscription.expires_at).toLocaleDateString()}`
+                      : `${language === 'rw' ? 'Byarangiye ku' : 'Expired on'}: ${new Date(subscription.expires_at).toLocaleDateString()}`}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-3">

@@ -5,6 +5,9 @@ type Client = SupabaseClient<any, 'public', any>;
 
 export const PODCAST_BASE_COLUMNS = 'id, title_en, title_rw, description_en, description_rw, cover_image_url, speaker_name, category_id, is_active, total_episodes, total_listeners, created_at, updated_at, is_system, access_tier_id, slug, status';
 
+// Card columns additionally join pricing_tiers so cards can show the content class (Free/Basic/Pro/Premium rank)
+export const PODCAST_CARD_COLUMNS = PODCAST_BASE_COLUMNS + ', access_tier:pricing_tiers!access_tier_id(rank)';
+
 export type PodcastQueryOptions = {
   includeSystem?: boolean;
   includeInactive?: boolean;

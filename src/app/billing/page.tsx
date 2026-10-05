@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { t } from '../../lib/i18n';
+import { useSubscriptionCountdown } from '@/lib/useSubscriptionCountdown';
 
 interface Payment {
   id: string;
@@ -19,6 +20,7 @@ interface Subscription {
   effectiveStatus: 'active' | 'expiring_soon' | 'expired' | 'cancelled' | 'past_due';
   expires_at: string | null;
   daysRemaining: number | null;
+  plan_name?: string | null;
 }
 
 export default function BillingPage() {
@@ -27,52 +29,40 @@ export default function BillingPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const countdown = useSubscriptionCountdown(
+    subscription && (subscription.effectiveStatus === 'active' || subscription.effectiveStatus === 'expiring_soon')
+      ? subscription.expires_at
+      : null
+  );
 
   useEffect(() => {
     const load = async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const uid = sessionData.session?.user.id || null;
+      const token = sessionData.session?.access_token || null;
       if (!uid) {
         window.location.href = '/login?redirect=/billing';
         return;
       }
       setUserId(uid);
 
-      const { data: subArr } = await supabase
-        .from('user_subscriptions')
-        .select('status, expires_at')
-        .eq('user_id', uid)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      const sub = (subArr && subArr.length > 0) ? subArr[0] : null;
-      if (sub) {
-        const subRow = sub as any;
-        const expiresAt = subRow.expires_at || null;
-        const now = new Date();
-        let effectiveStatus: Subscription['effectiveStatus'] = 'expired';
-        if (subRow.status === 'cancelled') {
-          effectiveStatus = 'cancelled';
-        } else if (subRow.status === 'past_due') {
-          effectiveStatus = 'past_due';
-        } else if (expiresAt) {
-          const expiry = new Date(expiresAt);
-          if (expiry > now) {
-            const horizon = new Date(now.getTime());
-            horizon.setDate(horizon.getDate() + 7);
-            effectiveStatus = expiry <= horizon ? 'expiring_soon' : 'active';
-          } else {
-            effectiveStatus = 'expired';
+      // Canonical subscription state (same endpoint as dashboard + mobile)
+      if (token) {
+        const res = await fetch('/api/subscription-status', {
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => null);
+        if (res && res.ok) {
+          const sub = await res.json();
+          if (sub && sub.status !== 'none') {
+            setSubscription({
+              status: sub.status,
+              effectiveStatus: sub.effectiveStatus,
+              expires_at: sub.expiresAt,
+              daysRemaining: sub.daysRemaining,
+              plan_name: sub.planName || null,
+            });
           }
         }
-        const daysRemaining = expiresAt
-          ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-          : null;
-        setSubscription({
-          status: subRow.status,
-          effectiveStatus,
-          expires_at: expiresAt,
-          daysRemaining,
-        });
       }
 
       const { data: pays } = await supabase
@@ -116,7 +106,15 @@ export default function BillingPage() {
         {subscription ? (
           <div className="flex items-center justify-between">
             <div>
+              {subscription.plan_name && (
+                <div className="text-lg font-bold text-white">{subscription.plan_name}</div>
+              )}
               <div className="text-xl font-semibold">{statusLabel(subscription)}</div>
+              {(subscription.effectiveStatus === 'active' || subscription.effectiveStatus === 'expiring_soon') && countdown && (
+                <div className="text-sm text-white font-medium mt-1">
+                  {countdown} · {subscription.daysRemaining !== null ? (language === 'rw' ? `iminsi ${subscription.daysRemaining} isigaye` : `${subscription.daysRemaining} days remaining`) : ''}
+                </div>
+              )}
               {subscription.effectiveStatus === 'expired' && subscription.expires_at ? (
                 <div className="text-sm text-muted">{language === 'rw' ? 'Byarangiye ku' : 'Expired on'} {new Date(subscription.expires_at).toLocaleDateString()}</div>
               ) : subscription.expires_at ? (

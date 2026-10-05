@@ -9,6 +9,8 @@ import { useLanguage } from '../../../contexts/LanguageContext';
 import { t } from '../../../lib/i18n';
 import FavoriteButton from '@/components/FavoriteButton';
 import ShareButton from '@/components/ShareButton';
+import ContentTierBadge from '@/components/ContentTierBadge';
+import { fetchUserTierRank, fetchEpisodeTierRank } from '@/lib/entitlements';
 import { useResumePlayback } from '@/lib/useResumePlayback';
 
 function generateUUID(): string {
@@ -129,6 +131,8 @@ export default function EpisodeDetailPage({ params }: Props) {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loadingStream, setLoadingStream] = useState<boolean>(false);
   const [upgradeRequired, setUpgradeRequired] = useState<{ user_tier_rank: number; content_tier_rank: number } | null>(null);
+  const [userTierRank, setUserTierRank] = useState(0);
+  const [contentTierRank, setContentTierRank] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingRef = useRef<boolean>(false);
   const lastTimeRef = useRef<number>(0);
@@ -181,6 +185,9 @@ export default function EpisodeDetailPage({ params }: Props) {
       setCache(cacheKey, ep, 5 * 60 * 1000);
       setLoading(false);
 
+      fetchUserTierRank().then(setUserTierRank).catch(() => {});
+      fetchEpisodeTierRank(params.id).then(setContentTierRank).catch(() => {});
+
       // Fetch related episodes by categories
       if (ep.categories && ep.categories.length > 0) {
         const { data: related } = await supabase
@@ -201,50 +208,6 @@ export default function EpisodeDetailPage({ params }: Props) {
 
     load();
   }, [params.id]);
-
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (loading) {
-    return (
-      <div className="container py-12 md:py-16">
-        <div className="max-w-4xl mx-auto">
-          <div className="h-8 w-48 bg-white/5 rounded mb-4 animate-pulse" />
-          <div className="grid md:grid-cols-[300px_1fr] gap-8">
-            <div className="aspect-square rounded-xl bg-white/5 animate-pulse" />
-            <div className="space-y-4">
-              <div className="h-6 w-3/4 bg-white/5 rounded animate-pulse" />
-              <div className="h-4 w-1/2 bg-white/5 rounded animate-pulse" />
-              <div className="h-20 w-full bg-white/5 rounded animate-pulse" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !episode) {
-    return (
-      <div className="container py-12 md:py-16">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-2xl font-bold mb-4">{t('common.error', language)}</h1>
-          <p className="text-muted mb-6">{t('episodes.notFound', language)}</p>
-          <Link href="/podcasts" className="inline-block px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
-            {t('episodes.backToPodcast', language)}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const title = (language === 'rw' ? episode.title_rw : episode.title_en) || episode.title_en || episode.title_rw || t('episodes.untitled', language);
-  const description = (language === 'rw' ? episode.description_rw : episode.description_en) || episode.description_en || episode.description_rw || '';
-  const podcastTitle = episode.podcasts ? ((language === 'rw' ? episode.podcasts.title_rw : episode.podcasts.title_en) || episode.podcasts.title_en || episode.podcasts.title_rw) : null;
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
 
   const sendListenItem = useCallback(async (item: ListenQueueItem): Promise<boolean> => {
     try {
@@ -418,6 +381,50 @@ export default function EpisodeDetailPage({ params }: Props) {
 
   const progressSaveRef = useRef<number>(0);
 
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="max-w-4xl mx-auto">
+          <div className="h-8 w-48 bg-white/5 rounded mb-4 animate-pulse" />
+          <div className="grid md:grid-cols-[300px_1fr] gap-8">
+            <div className="aspect-square rounded-xl bg-white/5 animate-pulse" />
+            <div className="space-y-4">
+              <div className="h-6 w-3/4 bg-white/5 rounded animate-pulse" />
+              <div className="h-4 w-1/2 bg-white/5 rounded animate-pulse" />
+              <div className="h-20 w-full bg-white/5 rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !episode) {
+    return (
+      <div className="container py-12 md:py-16">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-2xl font-bold mb-4">{t('common.error', language)}</h1>
+          <p className="text-muted mb-6">{t('episodes.notFound', language)}</p>
+          <Link href="/podcasts" className="inline-block px-6 py-2.5 rounded-lg bg-primary text-black font-semibold hover:opacity-90 transition">
+            {t('episodes.backToPodcast', language)}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const title = (language === 'rw' ? episode.title_rw : episode.title_en) || episode.title_en || episode.title_rw || t('episodes.untitled', language);
+  const description = (language === 'rw' ? episode.description_rw : episode.description_en) || episode.description_en || episode.description_rw || '';
+  const podcastTitle = episode.podcasts ? ((language === 'rw' ? episode.podcasts.title_rw : episode.podcasts.title_en) || episode.podcasts.title_en || episode.podcasts.title_rw) : null;
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
   return (
     <>
       <Head>
@@ -456,6 +463,7 @@ export default function EpisodeDetailPage({ params }: Props) {
             <h1 className="text-3xl md:text-4xl font-bold mb-3">{title}</h1>
             
             <div className="flex items-center gap-4 text-sm text-muted mb-6">
+              <ContentTierBadge contentTierRank={contentTierRank} userTierRank={userTierRank} language={language} />
               {episode.duration_seconds && <span>{formatDuration(episode.duration_seconds)}</span>}
               {episode.published_at && <span>•</span>}
               {episode.published_at && <span>{new Date(episode.published_at).toLocaleDateString()}</span>}

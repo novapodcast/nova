@@ -8,7 +8,9 @@ import { t } from '../lib/i18n';
 import NewsletterSignup from '../components/NewsletterSignup';
 import HeroCarousel, { CarouselSlide } from '../components/HeroCarousel';
 import PlayOverlay from '@/components/PlayOverlay';
-import { fetchFeaturedPublicPodcasts } from '@/lib/data/podcasts';
+import ContentTierBadge from '@/components/ContentTierBadge';
+import { fetchFeaturedPublicPodcasts, PODCAST_CARD_COLUMNS } from '@/lib/data/podcasts';
+import { fetchUserTierRank } from '@/lib/entitlements';
 import { supabase } from '@/lib/supabaseClient';
 
 interface Podcast {
@@ -21,6 +23,7 @@ interface Podcast {
   speaker_name: string | null;
   total_episodes: number | null;
   total_listeners: number | null;
+  access_tier?: { rank: number } | null;
 }
 
 interface ContinueListeningItem {
@@ -49,10 +52,11 @@ export default function HomePage() {
   const [metrics, setMetrics] = useState<{ viewers: number; episodes: number; minutes_listened: number; categories: { id: string; name_en: string; name_rw: string }[] } | null>(null);
   const [continueItems, setContinueItems] = useState<ContinueListeningItem[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userTierRank, setUserTierRank] = useState(0);
 
   useEffect(() => {
     async function loadFeatured() {
-      const { data } = await fetchFeaturedPublicPodcasts(8);
+      const { data } = await fetchFeaturedPublicPodcasts(8, supabase, PODCAST_CARD_COLUMNS);
       if (data) setFeaturedPodcasts(data as unknown as Podcast[]);
     }
     async function loadSlides() {
@@ -75,6 +79,7 @@ export default function HomePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
       setIsLoggedIn(true);
+      fetchUserTierRank(session.user.id).then(setUserTierRank).catch(() => {});
       const res = await fetch('/api/progress?type=continue', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -85,39 +90,13 @@ export default function HomePage() {
     } catch {}
   }
 
-  const formatCount = (value: number | null | undefined) => {
-    if (!value) return '0';
-    return new Intl.NumberFormat(language === 'rw' ? 'en-GB' : 'en-US').format(value);
-  };
-
   return (
     <div>
       {/* Hero Carousel */}
       <HeroCarousel language={language} slides={slides} />
 
-      {/* Traffic indicators (authenticated users only) + Platform categories */}
+      {/* Platform categories — keep discovery near the top */}
       <section className="container py-8 md:py-10">
-        {isLoggedIn && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6">
-            {[{
-              labelRw: 'Abarebye', labelEn: 'Viewers', value: metrics?.viewers
-            },{ labelRw: 'Ibice byashyizweho', labelEn: 'Episodes uploaded', value: metrics?.episodes },{ labelRw: 'Iminota yumviswe', labelEn: 'Minutes listened', value: metrics?.minutes_listened }].map((card, i) => (
-              <div key={i} className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
-                {card.value == null ? (
-                  <div>
-                    <div className="h-8 w-24 bg-white/5 rounded animate-pulse" />
-                    <div className="h-3 w-32 bg-white/5 rounded mt-2 animate-pulse" />
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-2xl md:text-3xl font-extrabold text-white">{new Intl.NumberFormat('en-US', { notation: 'compact' }).format(card.value)}+</div>
-                    <div className="text-sm text-muted mt-1">{language === 'rw' ? card.labelRw : card.labelEn}</div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {(!metrics || !metrics.categories) ? (
             <>
@@ -239,26 +218,23 @@ export default function HomePage() {
                 </div>
                 {/* Meta */}
                 <div className="mt-3 space-y-1">
-                  <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors">{title}</h3>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-semibold text-white line-clamp-2 leading-snug group-hover:text-primary transition-colors min-w-0">{title}</h3>
+                    <span className="text-xs font-bold text-white whitespace-nowrap flex-shrink-0">
+                      {(podcast.total_episodes ?? 0) === 1
+                        ? (language === 'rw' ? 'Igice 1' : '1 Episode')
+                        : (language === 'rw' ? `Ibice ${podcast.total_episodes ?? 0}` : `${podcast.total_episodes ?? 0} Episodes`)}
+                    </span>
+                  </div>
                   {podcast.speaker_name && (
                     <p className="text-sm text-muted/90 line-clamp-1">{podcast.speaker_name}</p>
                   )}
                   <div className="flex items-center gap-3 text-xs text-muted pt-1">
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                      {(podcast.total_episodes ?? 0) === 1 ? '1 Episode' : `${podcast.total_episodes ?? 0} Episodes`}
-                    </span>
-                    {(podcast.total_listeners ?? 0) > 0 && (
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        {formatCount(podcast.total_listeners)}
-                      </span>
-                    )}
+                    <ContentTierBadge
+                      contentTierRank={podcast.access_tier?.rank ?? 0}
+                      userTierRank={userTierRank}
+                      language={language}
+                    />
                   </div>
                 </div>
               </Link>
@@ -266,6 +242,31 @@ export default function HomePage() {
           })}
         </div>
       </section>
+
+      {/* Traffic indicators (authenticated users only) — moved below content discovery */}
+      {isLoggedIn && (
+        <section className="container pb-12 md:pb-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {[{
+              labelRw: 'Abarebye', labelEn: 'Viewers', value: metrics?.viewers
+            },{ labelRw: 'Ibice byashyizweho', labelEn: 'Episodes uploaded', value: metrics?.episodes },{ labelRw: 'Iminota yumviswe', labelEn: 'Minutes listened', value: metrics?.minutes_listened }].map((card, i) => (
+              <div key={i} className="rounded-xl bg-[var(--surface)] ring-1 ring-white/5 p-5">
+                {card.value == null ? (
+                  <div>
+                    <div className="h-8 w-24 bg-white/5 rounded animate-pulse" />
+                    <div className="h-3 w-32 bg-white/5 rounded mt-2 animate-pulse" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl md:text-3xl font-extrabold text-white">{new Intl.NumberFormat('en-US', { notation: 'compact' }).format(card.value)}+</div>
+                    <div className="text-sm text-muted mt-1">{language === 'rw' ? card.labelRw : card.labelEn}</div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="container pb-12 md:pb-16">
         <NewsletterSignup />

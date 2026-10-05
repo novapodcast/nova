@@ -30,6 +30,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'airtel' | 'mtn' | 'card'>('airtel');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [agree, setAgree] = useState(false);
+  const [hasActiveSub, setHasActiveSub] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -41,6 +42,17 @@ export default function CheckoutPage() {
       }
 
       setUser(sessionData.session.user);
+
+      // Canonical subscription state (used to explain mid-period upgrade behavior)
+      try {
+        const subRes = await fetch('/api/subscription-status', {
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        });
+        if (subRes.ok) {
+          const state = await subRes.json();
+          setHasActiveSub(!!state?.isActive);
+        }
+      } catch {}
 
       // Load plan details
       if (planId) {
@@ -178,6 +190,13 @@ export default function CheckoutPage() {
             </li>
           ))}
         </ul>
+        {hasActiveSub && (
+          <div className="mt-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-xs text-white/90">
+            {language === 'rw'
+              ? 'Ufite gahunda ikora — igihe gisigaye ntikibura. Igihe gishya cyongerwa ku gihe cyawe cyo guhera.'
+              : 'You have an active plan — your remaining time is preserved. The new period is added on top of your current expiry date.'}
+          </div>
+        )}
       </div>
 
       {/* Payment Method */}

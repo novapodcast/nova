@@ -8,6 +8,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { t, renderInsight } from '@/lib/i18n';
 import EpisodeRow from '@/components/EpisodeRow';
 import PlayOverlay from '@/components/PlayOverlay';
+import { useSubscriptionCountdown } from '@/lib/useSubscriptionCountdown';
 
 interface UserProfile {
   email: string;
@@ -63,7 +64,7 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [recGroups, setRecGroups] = useState<RecGroup[]>([]);
   const [minuteTab, setMinuteTab] = useState<MinuteTab>('week');
-  const [countdown, setCountdown] = useState<string | null>(null);
+  const countdown = useSubscriptionCountdown(subscription?.expires_at);
 
   const greetingKey = useCallback(() => {
     const h = new Date().getHours();
@@ -133,24 +134,6 @@ export default function DashboardPage() {
     loadData();
     return () => { active = false; };
   }, [router]);
-
-  // Subscription countdown timer
-  useEffect(() => {
-    if (!subscription?.expires_at) { setCountdown(null); return; }
-    const update = () => {
-      const end = new Date(subscription.expires_at as string).getTime();
-      const now = Date.now();
-      const diff = end - now;
-      if (isNaN(end) || diff <= 0) { setCountdown('00d 00h 00m'); return; }
-      const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      setCountdown(`${String(d).padStart(2,'0')}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m`);
-    };
-    update();
-    const id = setInterval(update, 60 * 1000);
-    return () => clearInterval(id);
-  }, [subscription?.expires_at]);
 
   const onSignOut = async () => {
     await supabase.auth.signOut();
