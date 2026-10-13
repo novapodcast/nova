@@ -1,12 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
+import { verifyCronRequest } from '../../../lib/cronAuth';
 
 async function logOps(type: string, payload: any) {
   if (!supabaseAdmin) return;
   await supabaseAdmin.from('webhook_events').insert({ provider: 'ops', type, payload });
 }
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!verifyCronRequest(req, res)) return;
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   // Find succeeded payments without active subscriptions

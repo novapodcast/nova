@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_NOTIFICATION_PREFS, validatePrefsPatch } from '@/lib/notificationPrefsValidation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -62,17 +63,27 @@ export async function POST(request: NextRequest) {
     }
     const userId = userData.user.id;
 
-    const body = await request.json();
-    const { new_episodes, followed_podcasts_only, email_enabled, push_enabled } = body;
+    const body = await request.json().catch(() => null);
+    const validation = validatePrefsPatch(body);
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    // Fetch the existing row so a partial save never resets fields the
+    // caller didn't send (e.g. mobile-only category_* / quiet_hours_* fields).
+    const { data: existing } = await supabase
+      .from('notification_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
 
     const { data, error } = await supabase
       .from('notification_preferences')
       .upsert({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        ...(existing || {}),
+        ...validation.patch,
         user_id: userId,
-        new_episodes: new_episodes ?? true,
-        followed_podcasts_only: followed_podcasts_only ?? false,
-        email_enabled: email_enabled ?? true,
-        push_enabled: push_enabled ?? false,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id',

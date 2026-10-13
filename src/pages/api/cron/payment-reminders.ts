@@ -1,8 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPush } from '../../../lib/notify';
+import { verifyCronRequest } from '../../../lib/cronAuth';
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!verifyCronRequest(req, res)) return;
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();

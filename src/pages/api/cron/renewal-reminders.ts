@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPush } from '../../../lib/notify';
+import { verifyCronRequest } from '../../../lib/cronAuth';
 
 async function isReminderAlreadySent(userId: string, reminderType: string): Promise<boolean> {
   if (!supabaseAdmin) return false;
@@ -27,7 +28,8 @@ async function recordReminderSent(userId: string, reminderType: string) {
   } catch {}
 }
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!verifyCronRequest(req, res)) return;
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const now = new Date();
@@ -67,14 +69,17 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     const reminderType = 'post_expiry_renewal';
     if (await isReminderAlreadySent(userId, reminderType)) continue;
 
-    await sendPush(grouped[userId] || [], {
+    const tokens = grouped[userId] || [];
+    // No tokens → nothing deliverable; record to avoid rescanning forever.
+    // Failed push → leave unrecorded so the next run retries.
+    if (!tokens.length || (await sendPush(tokens, {
       title: 'Renew your subscription',
       body: 'Get back to your favorite shows with a quick renewal.',
       data: { type: 'renewal_reminder' },
-    });
-
-    await recordReminderSent(userId, reminderType);
-    sent++;
+    })).ok) {
+      await recordReminderSent(userId, reminderType);
+      sent++;
+    }
   }
 
   try { await supabaseAdmin.from('webhook_events').insert({ provider: 'ops', type: 'cron_renewal_reminders_sent', payload: { candidates: subs.length, sent } }); } catch {}

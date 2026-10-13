@@ -1,7 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { verifyAdmin } from '../../../lib/auth/admin';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+
+  const { isAdmin } = await verifyAdmin(token);
+  if (!isAdmin) return res.status(403).json({ error: 'Admin access required' });
 
   const env = (key: string) => !!process.env[key];
 
@@ -22,9 +30,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const email = {
     SMTP_HOST: env('SMTP_HOST'),
+    SMTP_PORT: env('SMTP_PORT'),
     SMTP_USER: env('SMTP_USER'),
     SMTP_PASS: env('SMTP_PASS'),
     SMTP_FROM: env('SMTP_FROM'),
+  };
+
+  const cron = {
+    CRON_SECRET: env('CRON_SECRET'),
   };
 
   const admin = {
@@ -45,6 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     required,
     payment,
     email,
+    cron,
     admin,
     note: 'Values are hidden; only presence is reported.',
   });

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseAdmin } from '../../../lib/supabaseAdmin';
 import { sendPush, sendSubscriptionExpiringEmail } from '../../../lib/notify';
+import { verifyCronRequest } from '../../../lib/cronAuth';
 
 const REMINDER_DAYS = [7, 3, 1];
 
@@ -17,19 +18,20 @@ async function isReminderAlreadySent(userId: string, reminderType: string): Prom
   return !!(data && data.length > 0);
 }
 
-async function recordReminderSent(userId: string, reminderType: string, daysUntilExpiry: number) {
+async function recordReminderSent(userId: string, reminderType: string, daysUntilExpiry: number, delivery: Record<string, any> = {}) {
   if (!supabaseAdmin) return;
   const idempotencyKey = `subscription_reminder:${userId}:${reminderType}`;
   try {
     await supabaseAdmin.from('webhook_events').insert({
       provider: 'ops',
       type: 'subscription_reminder_sent',
-      payload: { idempotencyKey, userId, reminderType, daysUntilExpiry, sentAt: new Date().toISOString() },
+      payload: { idempotencyKey, userId, reminderType, daysUntilExpiry, ...delivery, sentAt: new Date().toISOString() },
     });
   } catch {}
 }
 
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!verifyCronRequest(req, res)) return;
   if (!supabaseAdmin) return res.status(200).json({ ok: true, note: 'no-admin-client' });
 
   const now = new Date();
@@ -74,6 +76,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
   profiles?.forEach((p: any) => { profileMap[p.id] = p; });
 
   let sent = 0;
+  let skipped = 0;
   for (const s of subs) {
     const userId = (s as any).user_id;
     const expiresAt = new Date((s as any).expires_at);
@@ -86,23 +89,33 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       if (await isReminderAlreadySent(userId, reminderType)) continue;
 
       const pushTokens = groupedTokens[userId] || [];
+      let pushOk = true;
       if (pushTokens.length) {
-        await sendPush(pushTokens, {
+        pushOk = (await sendPush(pushTokens, {
           title: 'Subscription expiring soon',
           body: `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry > 1 ? 's' : ''}. Renew now to keep listening.`,
           data: { type: 'subscription_expiry', daysUntilExpiry },
-        });
+        })).ok;
       }
 
       const profile = profileMap[userId];
+      let emailStatus: string | null = null;
       if (profile?.email) {
-        try {
-          await sendSubscriptionExpiringEmail(profile.email, profile.full_name || '', daysUntilExpiry);
-        } catch {}
+        emailStatus = (await sendSubscriptionExpiringEmail(profile.email, profile.full_name || '', daysUntilExpiry)).status;
       }
 
-      await recordReminderSent(userId, reminderType, daysUntilExpiry);
-      sent++;
+      // Only mark the reminder as sent when no enabled channel reported a
+      // dry-run (unconfigured) or error outcome — otherwise it stays eligible
+      // for the next run instead of being silently recorded as delivered.
+      if (pushOk && (emailStatus === null || emailStatus === 'sent')) {
+        await recordReminderSent(userId, reminderType, daysUntilExpiry, {
+          pushAttempted: pushTokens.length > 0,
+          emailStatus,
+        });
+        sent++;
+      } else {
+        skipped++;
+      }
     }
   }
 
@@ -110,10 +123,10 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     await supabaseAdmin.from('webhook_events').insert({
       provider: 'ops',
       type: 'cron_subscription_expiry_run',
-      payload: { candidates: subs.length, sent, runAt: now.toISOString() },
+      payload: { candidates: subs.length, sent, skipped, runAt: now.toISOString() },
     });
   } catch {}
 
-  console.log('[expiry-reminders] done: candidates', subs.length, 'sent', sent);
-  res.status(200).json({ ok: true, candidates: subs.length, sent });
+  console.log('[expiry-reminders] done: candidates', subs.length, 'sent', sent, 'skipped', skipped);
+  res.status(200).json({ ok: true, candidates: subs.length, sent, skipped });
 }

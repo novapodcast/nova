@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import nodemailer from 'nodemailer';
+import { sendEmail } from '@/lib/notify';
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c] as string));
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,24 +24,26 @@ export async function POST(request: NextRequest) {
     }
 
     const to = process.env.CONTACT_TO || 'admin@nova.co.rw';
-    const host = process.env.SMTP_HOST;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-    const secure = process.env.SMTP_SECURE === 'true';
+    const html = `
+      <p><strong>From:</strong> ${escapeHtml(name)} &lt;${escapeHtml(email)}&gt;</p>
+      <p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+    `;
 
-    if (host && user && pass) {
-      const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-      await transporter.sendMail({
-        from: `Nova Website <${user}>`,
-        to,
-        subject: `Contact form: ${name}`,
-        replyTo: email,
-        text: message,
-      });
+    // sendEmail honors SMTP_FROM and treats port 465 as implicit TLS
+    // (compatible with smtp.gmail.com); no separate SMTP_SECURE needed.
+    const result = await sendEmail(to, `Contact form: ${name}`, html, {
+      replyTo: email,
+      text: message,
+    });
+
+    if (result.status === 'error') {
+      return NextResponse.json({ error: 'Email delivery failed' }, { status: 500 });
     }
-
-    return NextResponse.json({ ok: true });
+    if (result.status === 'dry-run') {
+      // SMTP not configured — report honestly instead of claiming success
+      return NextResponse.json({ ok: true, delivered: false, note: 'email-not-configured' });
+    }
+    return NextResponse.json({ ok: true, delivered: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
   }
