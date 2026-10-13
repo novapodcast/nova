@@ -96,7 +96,7 @@ export default function HomePage() {
       <HeroCarousel language={language} slides={slides} />
 
       {/* Platform categories — keep discovery near the top */}
-      <section className="container py-8 md:py-10">
+      <section className="container py-8 md:py-6">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {(!metrics || !metrics.categories) ? (
             <>
@@ -176,7 +176,7 @@ export default function HomePage() {
       )}
 
       {/* Featured Podcasts */}
-      <section className="container py-12 md:py-16">
+      <section className="container py-12 md:pt-8 md:pb-16">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold mb-1">

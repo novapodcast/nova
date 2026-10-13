@@ -90,7 +90,7 @@ export default function HeroCarousel({ language = 'en', slides }: { language?: s
       </div>
 
       {/* Content */}
-      <div className="container relative z-10 pb-12 pt-24">
+      <div className="container relative z-10 pb-12 pt-24 md:pb-8 md:pt-20">
         <div className="max-w-2xl">
           {/* Slide content with transition */}
           <div
